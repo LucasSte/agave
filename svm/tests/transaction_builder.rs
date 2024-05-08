@@ -91,19 +91,22 @@ impl SanitizedTransactionBuilder {
             instruction.accounts.push(item.pubkey);
         }
 
+        std::println!("The program id is: {:?}", program_id);
         self.instructions.push(instruction);
     }
 
     pub fn build(
         &mut self,
         block_hash: Hash,
-        fee_payer: (Pubkey, Signature),
+        fee_payer: Option<(Pubkey, Signature)>,
         v0_message: bool,
     ) -> SanitizedTransaction {
         let mut account_keys = Vec::new();
         let header = MessageHeader {
             // The fee payer always requires a signature so +1
-            num_required_signatures: self.num_required_signatures.saturating_add(1),
+            num_required_signatures:
+            if fee_payer.is_some() { self.num_required_signatures.saturating_add(1) }
+             else {self.num_required_signatures},
             num_readonly_signed_accounts: self.num_readonly_signed_accounts,
             // The program id is always a readonly unsigned account
             num_readonly_unsigned_accounts: self.num_readonly_unsigned_accounts.saturating_add(1),
@@ -121,8 +124,12 @@ impl SanitizedTransactionBuilder {
         );
         let mut positions: HashMap<Pubkey, usize> = HashMap::new();
 
-        account_keys.push(fee_payer.0);
-        signatures.push(fee_payer.1);
+        // TODO: Is this necessary
+        // In case these keys were already provided.
+        if let Some((payer_key, payer_signature)) = fee_payer {
+            account_keys.push(payer_key);
+            signatures.push(payer_signature);
+        }
 
         let mut positions_lambda = |key: &Pubkey| {
             positions.insert(*key, account_keys.len());
@@ -165,6 +172,9 @@ impl SanitizedTransactionBuilder {
             compiled_instructions.push(instruction);
         }
 
+        std::println!("accts_len: {}", account_keys.len());
+        std::println!("idx: {:?}", compiled_instructions[0].accounts);
+        std::println!("header: {:?}", header);
         let message = if v0_message {
             let message = v0::Message {
                 header,

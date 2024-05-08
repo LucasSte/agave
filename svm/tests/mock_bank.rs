@@ -56,3 +56,9 @@ impl TransactionProcessingCallback for MockBankCallback {
             .insert(*program_id, account_data);
     }
 }
+
+impl MockBankCallback {
+    pub fn override_feature_set(&mut self, new_set: FeatureSet) {
+        self.feature_set = Arc::new(new_set)
+    }
+}
