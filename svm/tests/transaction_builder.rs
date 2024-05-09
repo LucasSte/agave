@@ -13,6 +13,7 @@ use {
     },
     std::collections::HashMap,
 };
+use solana_sdk::transaction::TransactionError;
 
 #[derive(Default)]
 pub struct SanitizedTransactionBuilder {
@@ -26,9 +27,17 @@ pub struct SanitizedTransactionBuilder {
     unsigned_mutable_account: Vec<Pubkey>,
 }
 
+#[derive(PartialEq, Eq, Hash, Clone)]
+enum AccountType {
+    Readonly,
+    Writable,
+    SignerReadonly,
+    SignerWritable,
+}
+
 struct InnerInstruction {
     program_id: Pubkey,
-    accounts: Vec<Pubkey>,
+    accounts: Vec<(Pubkey, AccountType)>,
     data: Vec<u8>,
 }
 
@@ -57,10 +66,6 @@ impl SanitizedTransactionBuilder {
         signatures: HashMap<Pubkey, Signature>,
         data: Vec<u8>,
     ) {
-        self.num_required_signatures = self
-            .num_required_signatures
-            .saturating_add(signatures.len() as u8);
-
         let mut instruction = InnerInstruction {
             program_id,
             accounts: Vec::new(),
@@ -68,45 +73,55 @@ impl SanitizedTransactionBuilder {
         };
 
         for item in &accounts {
-            match (item.is_signer, item.is_writable) {
+            let acc_type = match (item.is_signer, item.is_writable) {
                 (true, true) => {
+                    self.num_required_signatures = self.num_required_signatures.saturating_add(1);
                     self.signed_mutable_accounts
                         .push((item.pubkey, signatures[&item.pubkey]));
+                    AccountType::SignerWritable
                 }
                 (true, false) => {
+                    self.num_required_signatures = self.num_required_signatures.saturating_add(1);
                     self.num_readonly_signed_accounts =
                         self.num_readonly_signed_accounts.saturating_add(1);
                     self.signed_readonly_accounts
                         .push((item.pubkey, signatures[&item.pubkey]));
+                    AccountType::SignerReadonly
                 }
                 (false, true) => {
                     self.unsigned_mutable_account.push(item.pubkey);
+                    AccountType::Writable
                 }
                 (false, false) => {
                     self.num_readonly_unsigned_accounts =
                         self.num_readonly_unsigned_accounts.saturating_add(1);
                     self.unsigned_readonly_accounts.push(item.pubkey);
+                    AccountType::Readonly
                 }
-            }
-            instruction.accounts.push(item.pubkey);
+            };
+            instruction.accounts.push((item.pubkey, acc_type));
         }
 
-        std::println!("The program id is: {:?}", program_id);
         self.instructions.push(instruction);
     }
 
     pub fn build(
         &mut self,
         block_hash: Hash,
-        fee_payer: Option<(Pubkey, Signature)>,
+        fee_payer:(Pubkey, Signature),
         v0_message: bool,
-    ) -> SanitizedTransaction {
-        let mut account_keys = Vec::new();
+    ) -> Result<SanitizedTransaction, TransactionError> {
+        let mut account_keys = Vec::with_capacity(
+            self.signed_mutable_accounts
+                .len()
+                .saturating_add(self.signed_readonly_accounts.len())
+                .saturating_add(self.unsigned_mutable_account.len())
+                .saturating_add(self.unsigned_readonly_accounts.len())
+                .saturating_add(1),
+        );
         let header = MessageHeader {
             // The fee payer always requires a signature so +1
-            num_required_signatures:
-            if fee_payer.is_some() { self.num_required_signatures.saturating_add(1) }
-             else {self.num_required_signatures},
+            num_required_signatures: self.num_required_signatures.saturating_add(1) ,
             num_readonly_signed_accounts: self.num_readonly_signed_accounts,
             // The program id is always a readonly unsigned account
             num_readonly_unsigned_accounts: self.num_readonly_unsigned_accounts.saturating_add(1),
@@ -118,42 +133,36 @@ impl SanitizedTransactionBuilder {
             self.signed_mutable_accounts
                 .len()
                 .saturating_add(self.signed_readonly_accounts.len())
-                .saturating_add(self.unsigned_mutable_account.len())
-                .saturating_add(self.unsigned_readonly_accounts.len())
                 .saturating_add(1),
         );
-        let mut positions: HashMap<Pubkey, usize> = HashMap::new();
+        let mut positions: HashMap<(Pubkey, AccountType), usize> = HashMap::new();
 
-        // TODO: Is this necessary
-        // In case these keys were already provided.
-        if let Some((payer_key, payer_signature)) = fee_payer {
-            account_keys.push(payer_key);
-            signatures.push(payer_signature);
-        }
+        account_keys.push(fee_payer.0);
+        signatures.push(fee_payer.1);
 
-        let mut positions_lambda = |key: &Pubkey| {
-            positions.insert(*key, account_keys.len());
+        let mut positions_lambda = |key: &Pubkey, ty: AccountType| {
+            positions.insert((*key, ty), account_keys.len());
             account_keys.push(*key);
         };
 
         self.signed_mutable_accounts
             .iter()
             .for_each(|(key, signature)| {
-                positions_lambda(key);
+                positions_lambda(key, AccountType::SignerWritable);
                 signatures.push(*signature);
             });
         self.signed_readonly_accounts
             .iter()
             .for_each(|(key, signature)| {
-                positions_lambda(key);
+                positions_lambda(key, AccountType::SignerReadonly);
                 signatures.push(*signature);
             });
         self.unsigned_mutable_account
             .iter()
-            .for_each(&mut positions_lambda);
+            .for_each(|key| positions_lambda(key, AccountType::Writable));
         self.unsigned_readonly_accounts
             .iter()
-            .for_each(&mut positions_lambda);
+            .for_each(|key| positions_lambda(key, AccountType::Readonly));
 
         let instructions = self.clean_up();
 
@@ -172,9 +181,6 @@ impl SanitizedTransactionBuilder {
             compiled_instructions.push(instruction);
         }
 
-        std::println!("accts_len: {}", account_keys.len());
-        std::println!("idx: {:?}", compiled_instructions[0].accounts);
-        std::println!("header: {:?}", header);
         let message = if v0_message {
             let message = v0::Message {
                 header,
@@ -205,15 +211,14 @@ impl SanitizedTransactionBuilder {
             SanitizedVersionedTransaction::try_new(transaction).unwrap();
 
         let loader = MockLoader {};
-        let sanitized_transaction = SanitizedTransaction::try_new(
+
+        SanitizedTransaction::try_new(
             sanitized_versioned_transaction,
             Hash::new_unique(),
             false,
             loader,
             &ReservedAccountKeys::new_all_activated().active,
-        );
-
-        sanitized_transaction.unwrap()
+        )
     }
 
     fn clean_up(&mut self) -> Vec<InnerInstruction> {

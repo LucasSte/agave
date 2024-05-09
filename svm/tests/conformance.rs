@@ -21,10 +21,12 @@ use solana_sdk::hash::Hash;
 use solana_sdk::instruction::AccountMeta;
 use solana_sdk::pubkey::Pubkey;
 use solana_sdk::signature::Signature;
+use solana_sdk::transaction::TransactionError;
 use solana_svm::runtime_config::RuntimeConfig;
 use solana_svm::transaction_error_metrics::TransactionErrorMetrics;
 use solana_svm::transaction_processor::{ExecutionRecordingConfig, TransactionBatchProcessor};
 use crate::mock_bank::MockBankCallback;
+use crate::proto::InstrFixture;
 use crate::transaction_builder::SanitizedTransactionBuilder;
 
 mod proto {
@@ -82,59 +84,60 @@ fn fixture() {
     dir.push("20240425");
     dir.push("bpf-loader");
 
-    // for path in std::fs::read_dir(dir).unwrap() {
-    //     let mut file = File::open(path.as_ref().unwrap().path()).expect("file not found");
-    //     let mut buffer = Vec::new();
-    //     file.read_to_end(&mut buffer).expect("Failed to read file");
-    //
-    //     let fixture = proto::InstrFixture::decode(buffer.as_slice()).unwrap();
-    //     if fixture.output.unwrap().result == 0 {
-    //         std::println!("path: {}", path.unwrap().path().display());
-    //         break;
-    //     }
-    // }
-    // return;
+    for path in std::fs::read_dir(dir).unwrap() {
+        let mut file = File::open(path.as_ref().unwrap().path()).expect("file not found");
+        let mut buffer = Vec::new();
+        file.read_to_end(&mut buffer).expect("Failed to read file");
+        std::println!("Testing: {}", path.unwrap().path().display());
 
-    dir.push("c166fadd709eb7e1.bin");
+        let fixture = proto::InstrFixture::decode(buffer.as_slice()).unwrap();
+        execute_fixture(fixture);
+    }
+
+    //dir.push("c166fadd709eb7e1.bin");
     //dir.push("0c9471f50baa2b03.bin");
 
-    let mut file = File::open(dir.clone()).expect("file not found");
-    let mut buffer = Vec::new();
-    file.read_to_end(&mut buffer).expect("Failed to read file");
+    // For debugging
+    // dir.push("573f54c36f3eca95.bin");
+    //
+    // let mut file = File::open(dir.clone()).expect("file not found");
+    // let mut buffer = Vec::new();
+    // file.read_to_end(&mut buffer).expect("Failed to read file");
+    //
+    // let fixture = proto::InstrFixture::decode(buffer.as_slice()).unwrap();
+    //
+    // let program_id = fixture.input.as_ref().unwrap().program_id.clone();
+    // std::println!("program id: {:?}", Pubkey::new_from_array(program_id.try_into().unwrap()));
+    //
+    // for item in &fixture.input.as_ref().unwrap().accounts {
+    //     std::println!("Acct: {:?} => owner: {:?}",
+    //                   Pubkey::new_from_array(item.address.clone().try_into().unwrap()),
+    //         Pubkey::new_from_array(item.owner.clone().try_into().unwrap()),
+    //     );
+    // }
+    //
+    // for item in &fixture.input.as_ref().unwrap().instr_accounts {
+    //     std::println!("idx: {}, writable: {}, signer: {}", item.index, item.is_writable, item.is_signer);
+    // }
+    //
+    // std::println!("Has txn context: {:?}", fixture.input.as_ref().unwrap().txn_context.is_some());
+    // std::println!("Has slot context: {:?}", fixture.input.as_ref().unwrap().slot_context.is_some());
+    // std::println!("Has epoch context: {:?}", fixture.input.as_ref().unwrap().epoch_context.is_some());
+    //
+    // execute_fixture(fixture);
+}
 
-    let fixture = proto::InstrFixture::decode(buffer.as_slice()).unwrap();
-
-    // DONE
-    let program_id = fixture.input.as_ref().unwrap().program_id.clone();
-    std::println!("program id: {:?}", Pubkey::new_from_array(program_id.try_into().unwrap()));
-
-    // DONE
-    for item in &fixture.input.as_ref().unwrap().accounts {
-        std::println!("Acct: {:?} => owner: {:?}",
-                      Pubkey::new_from_array(item.address.clone().try_into().unwrap()),
-            Pubkey::new_from_array(item.owner.clone().try_into().unwrap()),
-        );
-    }
-
-    // DONE
-    for item in &fixture.input.as_ref().unwrap().instr_accounts {
-        std::println!("idx: {}, writable: {}, signer: {}", item.index, item.is_writable, item.is_signer);
-    }
-
-    std::println!("Has txn context: {:?}", fixture.input.as_ref().unwrap().txn_context.is_some());
-    std::println!("Has slot context: {:?}", fixture.input.as_ref().unwrap().slot_context.is_some());
-    std::println!("Has epoch context: {:?}", fixture.input.as_ref().unwrap().epoch_context.is_some());
-
-    let mut input = fixture.input.unwrap();
+fn execute_fixture(fixture: InstrFixture) {
+    let input = fixture.input.unwrap();
     let output = fixture.output.unwrap();
-    std::println!("Result: {}, err: {}", output.result, output.custom_err);
+    //std::println!("Result: {}, err: {}", output.result, output.custom_err);
 
     let mut transaction_builder = SanitizedTransactionBuilder::default();
     let program_id = Pubkey::new_from_array(input.program_id.try_into().unwrap());
     let mut accounts : Vec<AccountMeta> = Vec::with_capacity(input.instr_accounts.len());
     let mut signatures : HashMap<Pubkey, Signature> = HashMap::with_capacity(input.instr_accounts.len());
 
-    for item in &input.instr_accounts {
+    for item in input.instr_accounts {
         let pubkey = Pubkey::new_from_array(input.accounts[item.index as usize].address.clone().try_into().unwrap());
         accounts.push(
             AccountMeta {
@@ -169,9 +172,14 @@ fn fixture() {
     }
 
     let fee_payer = Pubkey::new_unique();
-    let transactions = vec![transaction_builder.build(
-        Hash::default(), Some((fee_payer, Signature::new_unique())), false
-    )];
+    let Ok(transaction) = transaction_builder.build(
+        Hash::default(), (fee_payer, Signature::new_unique()), false
+    ) else {
+        assert_ne!(output.result, 0);
+        return;
+    };
+
+    let transactions = vec![transaction];
     let mut transaction_check = vec![(Ok(()), None, Some(30))];
 
     let mut mock_bank = MockBankCallback::default();
@@ -248,8 +256,6 @@ fn fixture() {
         )
     );
 
-    // TODO: Do I need to add the builtin?
-
     let mut error_counter = TransactionErrorMetrics::default();
     let recording_config = ExecutionRecordingConfig {
         enable_log_recording: true,
@@ -267,33 +273,62 @@ fn fixture() {
         &mut timings,
         None,
         None,
-        false,
+        true,
     );
 
-    std::println!("{:?}", result.execution_results);
+    //std::println!("{:?}", result.execution_results);
 
     // assert that is worked and has no error
+    if !result.execution_results[0].was_executed() || result.execution_results[0].details().unwrap().status.is_err() {
+        //std::println!("{:?}", result.execution_results[0]);
+        //std::println!("custom error: {}", output.custom_err);
+        if output.result != 0 {
+            return;
+        }
 
-    // Check modified accounts
-    let idx_map : HashMap<Pubkey, usize> = output.modified_accounts.iter().enumerate().map(
-        |(idx, state) | (Pubkey::new_from_array(state.address.clone().try_into().unwrap()), idx)
-    ).collect();
-
-    std::println!("MAP: {:?}", idx_map);
-
-    for item in &result.loaded_transactions[0].0.as_ref().unwrap().accounts {
-        std::println!("looking for: {:?}", item.0);
-        let index = *idx_map.get(&item.0).expect("Account not in expected results");
-        let expected_data = &output.modified_accounts[index];
-        let received_data = &item.1;
-        assert_eq!(received_data.lamports(), expected_data.lamports);
-        assert_eq!(received_data.data(), expected_data.data.as_slice());
-        assert_eq!(received_data.owner(), &Pubkey::new_from_array(expected_data.owner.clone().try_into().unwrap()));
-        assert_eq!(received_data.executable(), expected_data.executable);
-        assert_eq!(received_data.rent_epoch(), expected_data.rent_epoch);
+        match result.execution_results[0].flattened_result() {
+            Err(TransactionError::InsufficientFundsForRent { .. }) => {
+                // This is a transaction error not an instruction error
+                let details = result.execution_results[0].details().unwrap();
+                assert!(details.log_messages.as_ref().unwrap().contains(&"Program BPFLoaderUpgradeab1e11111111111111111111111 success".to_string()));
+                return;
+            }
+            Err(TransactionError::ProgramCacheHitMaxLimit) => {
+                // This is a transaction error not an instruction error
+                return;
+            }
+            _ => (),
+        }
     }
 
-    std::println!("cu: {} - expected: {}", result.execution_results[0].details().unwrap().executed_units, input.cu_avail - output.cu_avail);
-    std::println!("ret: {}", result.execution_results[0].details().unwrap().return_data.is_some());
-    std::println!("expected_ret: {}", output.return_data.len());
+    // Check modified accounts
+    let idx_map : HashMap<Pubkey, usize> = result.loaded_transactions[0].0.as_ref().unwrap().accounts
+        .iter().enumerate().map(|(idx, item)| (item.0, idx))
+        .collect();
+
+
+    for item in &output.modified_accounts {
+        let pubkey = Pubkey::new_from_array(item.address.clone().try_into().unwrap());
+        //std::println!("looking for: {:?}", pubkey);
+        let index = *idx_map.get(&pubkey).expect("Account not in expected results");
+        let received_data = &result.loaded_transactions[0].0.as_ref()
+            .unwrap().accounts[index].1;
+        assert_eq!(received_data.lamports(), item.lamports);
+        assert_eq!(received_data.data(), item.data.as_slice());
+        assert_eq!(received_data.owner(), &Pubkey::new_from_array(item.owner.clone().try_into().unwrap()));
+        assert_eq!(received_data.executable(), item.executable);
+        assert_eq!(received_data.rent_epoch(), item.rent_epoch);
+    }
+
+    let execution_details = result.execution_results[0].details().unwrap();
+    assert_eq!(execution_details.executed_units, input.cu_avail - output.cu_avail);
+    //std::println!("cu: {} - expected: {}", result.execution_results[0].details().unwrap().executed_units, input.cu_avail - output.cu_avail);
+    //std::println!("ret: {}", result.execution_results[0].details().unwrap().return_data.is_some());
+    //std::println!("expected_ret: {}", output.return_data.len());
+
+    if let Some(return_data) = &execution_details.return_data {
+        assert_eq!(return_data.data, output.return_data);
+    } else {
+        assert_eq!(output.return_data.len(), 0);
+    }
 }
