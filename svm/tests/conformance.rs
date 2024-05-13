@@ -83,8 +83,9 @@ fn fixture() {
     dir.push("instr");
     dir.push("fixtures");
     dir.push("20240425");
-    dir.push("stake");
+    dir.push("vote");
 
+    // bpf-loader
     // let ignore = HashSet::from([
     //     OsString::from("573f54c36f3eca95.bin")
     // ]);
@@ -102,6 +103,7 @@ fn fixture() {
     //     execute_fixture(fixture);
     // }
 
+    // system
     // These cases hit !native_loader::check_id(account.owner()) in  svm/src/transaction_account_state_info.rs:34
     // let ignore = HashSet::from([
     //     OsString::from("34ee00c659dc5aa6.bin"),
@@ -125,9 +127,10 @@ fn fixture() {
     //     std::println!("Testing: {}", path.unwrap().path().display());
     //
     //     let fixture = proto::InstrFixture::decode(buffer.as_slice()).unwrap();
-    //     execute_fixture(fixture);
+    //     execute_fixture(fixture, filename);
     // }
 
+    // vote
     // let ignore = HashSet::from([
     //     // Lamports disagree
     //     OsString::from("16e004f6282214fb.bin"),
@@ -160,57 +163,59 @@ fn fixture() {
     //     execute_fixture(fixture, filename);
     // }
 
-    let ignore = HashSet::from([
-        // Return data differ
-        OsString::from("43af1b5d721281f8.bin"),
-        OsString::from("6f632e1ad6075480.bin"),
-        OsString::from("5078aeaf8961ed39.bin"),
-    ]);
-    for path in std::fs::read_dir(dir).unwrap() {
-        let filename = path.as_ref().unwrap().file_name();
-        if ignore.contains(&filename) {
-            continue;
-        }
-        let mut file = File::open(path.as_ref().unwrap().path()).expect("file not found");
-        let mut buffer = Vec::new();
-        file.read_to_end(&mut buffer).expect("Failed to read file");
-        std::println!("Testing: {}", path.unwrap().path().display());
-
-        let fixture = proto::InstrFixture::decode(buffer.as_slice()).unwrap();
-        execute_fixture(fixture, filename);
-    }
+    // stake
+    // let ignore = HashSet::from([
+    //     // Return data differ
+    //     OsString::from("43af1b5d721281f8.bin"),
+    //     OsString::from("6f632e1ad6075480.bin"),
+    //     OsString::from("5078aeaf8961ed39.bin"),
+    // ]);
+    // for path in std::fs::read_dir(dir).unwrap() {
+    //     let filename = path.as_ref().unwrap().file_name();
+    //     if ignore.contains(&filename) {
+    //         continue;
+    //     }
+    //     let mut file = File::open(path.as_ref().unwrap().path()).expect("file not found");
+    //     let mut buffer = Vec::new();
+    //     file.read_to_end(&mut buffer).expect("Failed to read file");
+    //     std::println!("Testing: {}", path.unwrap().path().display());
+    //
+    //     let fixture = proto::InstrFixture::decode(buffer.as_slice()).unwrap();
+    //     execute_fixture(fixture, filename);
+    // }
 
     //dir.push("c166fadd709eb7e1.bin");
     //dir.push("0c9471f50baa2b03.bin");
 
     // For debugging
-    // dir.push("573f54c36f3eca95.bin");
-    //
-    // let mut file = File::open(dir.clone()).expect("file not found");
-    // let mut buffer = Vec::new();
-    // file.read_to_end(&mut buffer).expect("Failed to read file");
-    //
-    // let fixture = proto::InstrFixture::decode(buffer.as_slice()).unwrap();
-    //
-    // let program_id = fixture.input.as_ref().unwrap().program_id.clone();
-    // std::println!("program id: {:?}", Pubkey::new_from_array(program_id.try_into().unwrap()));
-    //
-    // for item in &fixture.input.as_ref().unwrap().accounts {
-    //     std::println!("Acct: {:?} => owner: {:?}",
-    //                   Pubkey::new_from_array(item.address.clone().try_into().unwrap()),
-    //         Pubkey::new_from_array(item.owner.clone().try_into().unwrap()),
-    //     );
-    // }
-    //
-    // for item in &fixture.input.as_ref().unwrap().instr_accounts {
-    //     std::println!("idx: {}, writable: {}, signer: {}", item.index, item.is_writable, item.is_signer);
-    // }
-    //
-    // std::println!("Has txn context: {:?}", fixture.input.as_ref().unwrap().txn_context.is_some());
-    // std::println!("Has slot context: {:?}", fixture.input.as_ref().unwrap().slot_context.is_some());
-    // std::println!("Has epoch context: {:?}", fixture.input.as_ref().unwrap().epoch_context.is_some());
-    //
-    // execute_fixture(fixture);
+    dir.push("16e004f6282214fb.bin");
+
+    let mut file = File::open(dir.clone()).expect("file not found");
+    let mut buffer = Vec::new();
+    file.read_to_end(&mut buffer).expect("Failed to read file");
+
+    let fixture = proto::InstrFixture::decode(buffer.as_slice()).unwrap();
+
+    let program_id = fixture.input.as_ref().unwrap().program_id.clone();
+    std::println!("program id: {:?}", Pubkey::new_from_array(program_id.try_into().unwrap()));
+
+    for item in &fixture.input.as_ref().unwrap().accounts {
+        std::println!("Acct: {:?} => owner: {:?} => lamports: {}",
+                      Pubkey::new_from_array(item.address.clone().try_into().unwrap()),
+            Pubkey::new_from_array(item.owner.clone().try_into().unwrap()),
+            item.lamports
+        );
+    }
+
+    for item in &fixture.input.as_ref().unwrap().instr_accounts {
+        std::println!("idx: {}, writable: {}, signer: {}", item.index, item.is_writable, item.is_signer);
+    }
+
+    std::println!("Has txn context: {:?}", fixture.input.as_ref().unwrap().txn_context.is_some());
+    std::println!("Has slot context: {:?}", fixture.input.as_ref().unwrap().slot_context.is_some());
+    std::println!("Has epoch context: {:?}", fixture.input.as_ref().unwrap().epoch_context.is_some());
+
+    execute_fixture(fixture, dir.file_name().unwrap().to_os_string());
 }
 
 fn execute_fixture(fixture: InstrFixture, filename: OsString) {
@@ -394,7 +399,7 @@ fn execute_fixture(fixture: InstrFixture, filename: OsString) {
 
     for item in &output.modified_accounts {
         let pubkey = Pubkey::new_from_array(item.address.clone().try_into().unwrap());
-        //std::println!("looking for: {:?}", pubkey);
+        std::println!("looking for: {:?}", pubkey);
         let index = *idx_map.get(&pubkey).expect("Account not in expected results");
         let received_data = &result.loaded_transactions[0].0.as_ref()
             .unwrap().accounts[index].1;
