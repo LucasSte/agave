@@ -388,7 +388,7 @@ fn execute_fixture(fixture: InstrFixture, filename: OsString) {
 
         panic!("Transaction was not successful");
         //std::println!("Transaction shouldn't have failed: {:?}", filename);
-        return;
+        //return;
     }
 
     // Check modified accounts
