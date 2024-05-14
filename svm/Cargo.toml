@@ -12,6 +12,7 @@ edition = { workspace = true }
 [dependencies]
 itertools = { workspace = true }
 log = { workspace = true }
+loom = { workspace = true, optional = true}
 percentage = { workspace = true }
 serde = { workspace = true, features = ["derive", "rc"] }
 solana-frozen-abi = { workspace = true }
@@ -43,6 +44,4 @@ rustc_version = { workspace = true }
 
 [features]
 dev-context-only-utils = []
-
-[target.'cfg(loom)'.dependencies]
-loom = "0.7.2"
+loom-test = ["solana-program-runtime/loom-test", "dep:loom"]

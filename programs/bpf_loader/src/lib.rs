@@ -50,10 +50,12 @@ use {
         cell::RefCell,
         mem,
         rc::Rc,
-        sync::{atomic::Ordering, Arc},
     },
     syscalls::{create_program_runtime_environment_v1, morph_into_deployment_environment_v1},
 };
+
+// TODO: Fix me
+use loom::sync::{atomic::Ordering, Arc};
 
 pub const DEFAULT_LOADER_COMPUTE_UNITS: u64 = 570;
 pub const DEPRECATED_LOADER_COMPUTE_UNITS: u64 = 1_140;

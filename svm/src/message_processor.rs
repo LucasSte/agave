@@ -167,8 +167,10 @@ mod tests {
             secp256k1_program, system_program,
             transaction_context::TransactionContext,
         },
-        std::sync::Arc,
     };
+
+    // TODO: Fix-me
+    use loom::sync::Arc;
 
     #[derive(Debug, Serialize, Deserialize)]
     enum MockInstruction {

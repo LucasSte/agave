@@ -44,10 +44,10 @@ use {
     },
 };
 
-#[cfg(not(loom))]
+#[cfg(not(feature = "loom-test"))]
 use std::sync::{atomic::Ordering, Arc};
 
-#[cfg(loom)]
+#[cfg(feature = "loom-test")]
 use loom::sync::{atomic::Ordering, Arc};
 
 
@@ -672,10 +672,10 @@ macro_rules! with_mock_invoke_context {
         $transaction_context:ident,
         $transaction_accounts:expr $(,)?
     ) => {
-        #[cfg(not(loom))]
+        #[cfg(not(feature = "loom-test"))]
         use std::sync::Arc;
 
-        #[cfg(loom)]
+        #[cfg(feature = "loom-test")]
         use loom::sync::Arc;
 
         use {

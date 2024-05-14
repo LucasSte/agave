@@ -59,10 +59,12 @@ use {
         mem::{align_of, size_of},
         slice::from_raw_parts_mut,
         str::{from_utf8, Utf8Error},
-        sync::Arc,
     },
     thiserror::Error as ThisError,
 };
+
+// TODO: Fix me
+use loom::sync::Arc;
 
 mod cpi;
 mod logging;

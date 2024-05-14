@@ -494,8 +494,11 @@ mod tests {
             transaction::{Result, SanitizedTransaction, Transaction, TransactionError},
             transaction_context::{TransactionAccount, TransactionContext},
         },
-        std::{borrow::Cow, collections::HashMap, convert::TryFrom, sync::Arc},
+        std::{borrow::Cow, collections::HashMap, convert::TryFrom},
     };
+
+    // TODO: Fix-me
+    use loom::sync::Arc;
 
     #[derive(Default)]
     struct TestCallbacks {

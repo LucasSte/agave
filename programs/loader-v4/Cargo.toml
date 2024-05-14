@@ -10,6 +10,7 @@ edition = { workspace = true }
 
 [dependencies]
 log = { workspace = true }
+loom = { workspace = true }
 solana-measure = { workspace = true }
 solana-program-runtime = { workspace = true }
 solana-sdk = { workspace = true }

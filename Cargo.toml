@@ -248,6 +248,7 @@ libsecp256k1 = { version = "0.6.0", default-features = false, features = [
 ] }
 light-poseidon = "0.2.0"
 log = "0.4.21"
+loom = {path = "/Users/lucasste/Documents/loom"}
 lru = "0.7.7"
 lz4 = "1.24.0"
 memmap2 = "0.5.10"
@@ -397,7 +398,7 @@ solana-zk-keygen = { path = "zk-keygen", version = "=2.0.0" }
 solana-zk-sdk = { path = "zk-sdk", version = "=2.0.0" }
 solana-zk-token-proof-program = { path = "programs/zk-token-proof", version = "=2.0.0" }
 solana-zk-token-sdk = { path = "zk-token-sdk", version = "=2.0.0" }
-solana_rbpf = "=0.8.0"
+solana_rbpf = { path = "/Users/lucasste/Documents/rbpf" }
 spl-associated-token-account = "=3.0.2"
 spl-instruction-padding = "0.1"
 spl-memo = "=4.0.1"
