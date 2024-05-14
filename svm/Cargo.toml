@@ -50,6 +50,7 @@ rustc_version = { workspace = true }
 
 [features]
 dev-context-only-utils = []
+<<<<<<< HEAD
 frozen-abi = [
     "dep:solana-frozen-abi",
     "dep:solana-frozen-abi-macro",
@@ -57,3 +58,8 @@ frozen-abi = [
     "solana-program-runtime/frozen-abi",
     "solana-sdk/frozen-abi",
 ]
+=======
+
+[target.'cfg(loom)'.dependencies]
+loom = "0.7.2"
+>>>>>>> ee4f75542 (Adjustments for test)

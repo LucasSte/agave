@@ -4,8 +4,14 @@ use {
         account::AccountSharedData, feature_set::FeatureSet, hash::Hash, pubkey::Pubkey,
         rent_collector::RentCollector,
     },
-    std::sync::Arc,
 };
+
+#[cfg(not(loom))]
+use std::sync::Arc;
+
+#[cfg(loom)]
+use loom::sync::Arc;
+
 
 /// Runtime callbacks for transaction processing.
 pub trait TransactionProcessingCallback {

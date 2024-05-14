@@ -47,12 +47,14 @@ use {
         collections::{hash_map::Entry, HashMap, HashSet},
         fmt::{Debug, Formatter},
         rc::Rc,
-        sync::{
-            atomic::Ordering::{self, Relaxed},
-            Arc, RwLock,
-        },
     },
 };
+
+#[cfg(not(loom))]
+use std::sync::{atomic::Ordering, Arc, RwLock};
+
+#[cfg(loom)]
+use loom::sync::{atomic::Ordering, Arc, RwLock};
 
 /// A list of log messages emitted during a transaction
 pub type TransactionLogMessages = Vec<String>;
@@ -472,6 +474,8 @@ impl<FG: ForkGraph> TransactionBatchProcessor<FG> {
                 // Sleep until the next finish_cooperative_loading_task() call.
                 // Once a task completes we'll wake up and try to load the
                 // missing programs inside the tx batch again.
+
+                std::println!("I AM IN THE COOKIE!");
                 let _new_cookie = task_waiter.wait(task_cookie);
             }
         }
@@ -837,6 +841,9 @@ impl<FG: ForkGraph> TransactionBatchProcessor<FG> {
 
 #[cfg(test)]
 mod tests {
+    use std::{env, fs};
+    use std::fs::File;
+    use std::io::Read;
     use {
         super::*,
         crate::account_loader::CheckedTransactionDetails,
@@ -865,6 +872,8 @@ mod tests {
             thread,
         },
     };
+    use solana_sdk::bpf_loader_upgradeable;
+    use solana_sdk::bpf_loader_upgradeable::UpgradeableLoaderState;
 
     fn new_unchecked_sanitized_message(message: Message) -> SanitizedMessage {
         SanitizedMessage::Legacy(LegacyMessage::new(
@@ -1715,59 +1724,19 @@ mod tests {
         assert_eq!(entry, Arc::new(program));
     }
 
-    #[test]
-    fn fast_concur_test() {
-        let mut mock_bank = MockBankCallback::default();
-        let batch_processor = TransactionBatchProcessor::<TestForkGraph>::new(
-            5,
-            5,
-            EpochSchedule::default(),
-            Arc::new(RuntimeConfig::default()),
-            HashSet::new(),
-        );
-        batch_processor.program_cache.write().unwrap().fork_graph =
-            Some(Arc::new(RwLock::new(TestForkGraph {})));
-
-        let programs = vec![
-            deploy_program("hello-solana".to_string(), &mut mock_bank),
-            deploy_program("simple-transfer".to_string(), &mut mock_bank),
-            deploy_program("clock-sysvar".to_string(), &mut mock_bank),
-        ];
-
-        let account_maps: HashMap<Pubkey, u64> = programs
-            .iter()
-            .enumerate()
-            .map(|(idx, key)| (*key, idx as u64))
-            .collect();
-
-        for _ in 0..10 {
-            let ths: Vec<_> = (0..4)
-                .map(|_| {
-                    let local_bank = mock_bank.clone();
-                    let processor = TransactionBatchProcessor::new_from(
-                        &batch_processor,
-                        batch_processor.slot,
-                        batch_processor.epoch,
-                    );
-                    let maps = account_maps.clone();
-                    let programs = programs.clone();
-                    thread::spawn(move || {
-                        let result = processor.replenish_program_cache(&local_bank, &maps, true);
-                        for key in &programs {
-                            let cache_entry = result.find(key);
-                            assert!(matches!(
-                                cache_entry.unwrap().program,
-                                ProgramCacheEntryType::Loaded(_)
-                            ));
-                        }
-                    })
-                })
-                .collect();
-
-            for th in ths {
-                th.join().unwrap();
-            }
-        }
+    fn load_program(name: String) -> Vec<u8> {
+        // Loading the program file
+        let mut dir = env::current_dir().unwrap();
+        dir.push("tests");
+        dir.push("example-programs");
+        dir.push(name.as_str());
+        let name = name.replace('-', "_");
+        dir.push(name + "_program.so");
+        let mut file = File::open(dir.clone()).expect("file not found");
+        let metadata = fs::metadata(dir).expect("Unable to read metadata");
+        let mut buffer = vec![0; metadata.len() as usize];
+        file.read_exact(&mut buffer).expect("Buffer overflow");
+        buffer
     }
 
     fn deploy_program(name: String, mock_bank: &mut MockBankCallback) -> Pubkey {
@@ -1801,18 +1770,7 @@ mod tests {
                 UpgradeableLoaderState::size_of_programdata_metadata().saturating_sub(header.len())
             )
         ];
-
-        let mut dir = env::current_dir().unwrap();
-        dir.push("tests");
-        dir.push("example-programs");
-        dir.push(name.as_str());
-        let name = name.replace('-', "_");
-        dir.push(name + "_program.so");
-        let mut file = File::open(dir.clone()).expect("file not found");
-        let metadata = fs::metadata(dir).expect("Unable to read metadata");
-        let mut buffer = vec![0; metadata.len() as usize];
-        file.read_exact(&mut buffer).expect("Buffer overflow");
-
+        let mut buffer = load_program(name);
         header.append(&mut complement);
         header.append(&mut buffer);
         account_data.set_data(header);
@@ -1823,5 +1781,56 @@ mod tests {
             .insert(program_data_account, account_data);
 
         program_account
+    }
+    #[test]
+    fn concurrent_cache() {
+        use loom::sync::Arc;
+        use loom::sync::atomic::AtomicUsize;
+        use loom::sync::atomic::Ordering::{Acquire, Release, Relaxed};
+        use loom::thread;
+
+        loom::model(|| {
+            let mut mock_bank = MockBankCallback::default();
+            let batch_processor = TransactionBatchProcessor::<TestForkGraph>::default();
+            batch_processor.program_cache.write().unwrap().fork_graph =
+                Some(Arc::new(RwLock::new(TestForkGraph {})));
+
+            let clock_program = deploy_program("clock-sysvar".to_string(), &mut mock_bank);
+            let transfer_program = deploy_program("simple-transfer".to_string(), &mut mock_bank);
+            let hello_program = deploy_program("hello-solana".to_string(), &mut mock_bank);
+
+            let mut account_maps: HashMap<Pubkey, u64> = HashMap::new();
+            account_maps.insert(clock_program, 2);
+            account_maps.insert(transfer_program, 1);
+            account_maps.insert(hello_program, 0);
+
+            let ths: Vec<_> = (0..5)
+                .map(|_| {
+                    let local_bank = mock_bank.clone();
+                    let processor = TransactionBatchProcessor::new(
+                        batch_processor.slot,
+                        batch_processor.epoch,
+                        batch_processor.epoch_schedule,
+                        batch_processor.runtime_config.clone(),
+                        batch_processor.program_cache.clone(),
+                        HashSet::new()
+                    );
+                    let maps = account_maps.clone();
+                    thread::spawn(move || {
+                        let result = processor.replenish_program_cache(
+                            &local_bank,
+                            &maps,
+                            true
+                        );
+                        let clock = result.find(&clock_program);
+                        assert!(clock.is_some());
+                        let transfer = result.find(&transfer_program);
+                        assert!(transfer.is_some());
+                        let hello = result.find(&transfer_program);
+                        assert!(hello.is_some());
+                    })
+                })
+                .collect();
+        });
     }
 }
