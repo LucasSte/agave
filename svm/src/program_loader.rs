@@ -18,8 +18,14 @@ use {
         loader_v4::{self, LoaderV4State, LoaderV4Status},
         pubkey::Pubkey,
     },
-    std::sync::Arc,
 };
+
+#[cfg(not(loom))]
+use std::sync::Arc;
+
+#[cfg(loom)]
+use loom::sync::Arc;
+
 
 #[derive(Debug)]
 pub(crate) enum ProgramAccountLoadResult {

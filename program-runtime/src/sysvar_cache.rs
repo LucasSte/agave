@@ -13,8 +13,13 @@ use {
         },
         transaction_context::{IndexOfAccount, InstructionContext, TransactionContext},
     },
-    std::sync::Arc,
 };
+
+#[cfg(not(loom))]
+use std::sync::Arc;
+
+#[cfg(loom)]
+use loom::sync::Arc;
 
 #[cfg(RUSTC_WITH_SPECIALIZATION)]
 impl ::solana_frozen_abi::abi_example::AbiExample for SysvarCache {

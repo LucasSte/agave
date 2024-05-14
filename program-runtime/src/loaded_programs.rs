@@ -1,3 +1,5 @@
+use std::thread;
+use std::time::Duration;
 use {
     crate::{
         invoke_context::{BuiltinFunctionWithContext, InvokeContext},
@@ -23,11 +25,19 @@ use {
     std::{
         collections::{hash_map::Entry, HashMap},
         fmt::{Debug, Formatter},
-        sync::{
-            atomic::{AtomicU64, Ordering},
-            Arc, Condvar, Mutex, RwLock,
-        },
     },
+};
+
+#[cfg(not(loom))]
+use std::sync::{
+    atomic::{AtomicU64, Ordering},
+    Arc, Condvar, Mutex, RwLock,
+};
+
+#[cfg(loom)]
+use loom::sync::{
+    atomic::{AtomicU64, Ordering},
+    Arc, Condvar, Mutex, RwLock,
 };
 
 pub type ProgramRuntimeEnvironment = Arc<BuiltinProgram<InvokeContext<'static>>>;
@@ -390,6 +400,8 @@ impl ProgramCacheEntry {
             metrics.verify_code_us = verify_code_time.end_as_us();
         }
 
+        // TODO: This is to simulate a delay in jit on ARM.
+        thread::sleep(Duration::from_millis(4000));
         #[cfg(all(not(target_os = "windows"), target_arch = "x86_64"))]
         {
             let jit_compile_time = Measure::start("jit_compile_time");

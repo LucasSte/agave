@@ -45,3 +45,6 @@ targets = ["x86_64-unknown-linux-gnu"]
 
 [build-dependencies]
 rustc_version = { workspace = true }
+
+[target.'cfg(loom)'.dependencies]
+loom = "0.7.2"

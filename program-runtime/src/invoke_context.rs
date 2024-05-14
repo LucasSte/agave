@@ -41,9 +41,15 @@ use {
         cell::RefCell,
         fmt::{self, Debug},
         rc::Rc,
-        sync::{atomic::Ordering, Arc},
     },
 };
+
+#[cfg(not(loom))]
+use std::sync::{atomic::Ordering, Arc};
+
+#[cfg(loom)]
+use loom::sync::{atomic::Ordering, Arc};
+
 
 pub type BuiltinFunctionWithContext = BuiltinFunction<InvokeContext<'static>>;
 
@@ -666,12 +672,17 @@ macro_rules! with_mock_invoke_context {
         $transaction_context:ident,
         $transaction_accounts:expr $(,)?
     ) => {
+        #[cfg(not(loom))]
+        use std::sync::Arc;
+
+        #[cfg(loom)]
+        use loom::sync::Arc;
+
         use {
             solana_sdk::{
                 account::ReadableAccount, feature_set::FeatureSet, hash::Hash, sysvar::rent::Rent,
                 transaction_context::TransactionContext,
             },
-            std::sync::Arc,
             $crate::{
                 compute_budget::ComputeBudget,
                 invoke_context::{EnvironmentConfig, InvokeContext},
