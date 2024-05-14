@@ -6,10 +6,10 @@ use {
     },
 };
 
-#[cfg(not(loom))]
+#[cfg(not(feature = "loom-test"))]
 use std::sync::Arc;
 
-#[cfg(loom)]
+#[cfg(feature = "loom-test")]
 use loom::sync::Arc;
 
 

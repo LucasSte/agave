@@ -33,9 +33,11 @@ use {
     std::{
         cell::RefCell,
         rc::Rc,
-        sync::{atomic::Ordering, Arc},
     },
 };
+
+// TODO: Fix-me
+use loom::sync::{atomic::Ordering, Arc};
 
 pub const DEFAULT_COMPUTE_UNITS: u64 = 2_000;
 

@@ -28,13 +28,13 @@ use {
     },
 };
 
-#[cfg(not(loom))]
+#[cfg(not(feature = "loom-test"))]
 use std::sync::{
     atomic::{AtomicU64, Ordering},
     Arc, Condvar, Mutex, RwLock,
 };
 
-#[cfg(loom)]
+#[cfg(feature = "loom-test")]
 use loom::sync::{
     atomic::{AtomicU64, Ordering},
     Arc, Condvar, Mutex, RwLock,
