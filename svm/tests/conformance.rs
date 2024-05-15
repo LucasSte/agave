@@ -83,7 +83,7 @@ fn fixture() {
     dir.push("instr");
     dir.push("fixtures");
     dir.push("20240425");
-    dir.push("vote");
+    dir.push("stake");
 
     // bpf-loader
     // let ignore = HashSet::from([
@@ -151,10 +151,10 @@ fn fixture() {
     //     execute_fixture(fixture, filename);
     // }
 
-    // stake
+    // stake ==> DONE!
     // let ignore = HashSet::from([
     //     // Return data differ
-    //     OsString::from("43af1b5d721281f8.bin"),
+    //     OsString::from("43af1b5d721281f8.bin"), Do not record return data
     //     OsString::from("6f632e1ad6075480.bin"),
     //     OsString::from("5078aeaf8961ed39.bin"),
     // ]);
@@ -176,34 +176,34 @@ fn fixture() {
     //dir.push("0c9471f50baa2b03.bin");
 
     // For debugging
-    dir.push("2b9c4987d3ddae11.bin");
-
-    let mut file = File::open(dir.clone()).expect("file not found");
-    let mut buffer = Vec::new();
-    file.read_to_end(&mut buffer).expect("Failed to read file");
-
-    let fixture = proto::InstrFixture::decode(buffer.as_slice()).unwrap();
-
-    let program_id = fixture.input.as_ref().unwrap().program_id.clone();
-    std::println!("program id: {:?}", Pubkey::new_from_array(program_id.try_into().unwrap()));
-
-    for item in &fixture.input.as_ref().unwrap().accounts {
-        std::println!("Acct: {:?} => owner: {:?} => lamports: {}",
-                      Pubkey::new_from_array(item.address.clone().try_into().unwrap()),
-            Pubkey::new_from_array(item.owner.clone().try_into().unwrap()),
-            item.lamports
-        );
-    }
-
-    for item in &fixture.input.as_ref().unwrap().instr_accounts {
-        std::println!("idx: {}, writable: {}, signer: {}", item.index, item.is_writable, item.is_signer);
-    }
-
-    std::println!("Has txn context: {:?}", fixture.input.as_ref().unwrap().txn_context.is_some());
-    std::println!("Has slot context: {:?}", fixture.input.as_ref().unwrap().slot_context.is_some());
-    std::println!("Has epoch context: {:?}", fixture.input.as_ref().unwrap().epoch_context.is_some());
-
-    execute_fixture(fixture, dir.file_name().unwrap().to_os_string());
+    // dir.push("5078aeaf8961ed39.bin");
+    //
+    // let mut file = File::open(dir.clone()).expect("file not found");
+    // let mut buffer = Vec::new();
+    // file.read_to_end(&mut buffer).expect("Failed to read file");
+    //
+    // let fixture = proto::InstrFixture::decode(buffer.as_slice()).unwrap();
+    //
+    // let program_id = fixture.input.as_ref().unwrap().program_id.clone();
+    // std::println!("program id: {:?}", Pubkey::new_from_array(program_id.try_into().unwrap()));
+    //
+    // for item in &fixture.input.as_ref().unwrap().accounts {
+    //     std::println!("Acct: {:?} => owner: {:?} => lamports: {}",
+    //                   Pubkey::new_from_array(item.address.clone().try_into().unwrap()),
+    //         Pubkey::new_from_array(item.owner.clone().try_into().unwrap()),
+    //         item.lamports
+    //     );
+    // }
+    //
+    // for item in &fixture.input.as_ref().unwrap().instr_accounts {
+    //     std::println!("idx: {}, writable: {}, signer: {}", item.index, item.is_writable, item.is_signer);
+    // }
+    //
+    // std::println!("Has txn context: {:?}", fixture.input.as_ref().unwrap().txn_context.is_some());
+    // std::println!("Has slot context: {:?}", fixture.input.as_ref().unwrap().slot_context.is_some());
+    // std::println!("Has epoch context: {:?}", fixture.input.as_ref().unwrap().epoch_context.is_some());
+    //
+    // execute_fixture(fixture, dir.file_name().unwrap().to_os_string());
 }
 
 fn execute_fixture(fixture: InstrFixture, filename: OsString) {
@@ -259,7 +259,7 @@ fn execute_fixture(fixture: InstrFixture, filename: OsString) {
         return;
     };
 
-    std::println!("transaction: {:#?}", transaction);
+    //std::println!("transaction: {:#?}", transaction);
     let transactions = vec![transaction];
     let mut transaction_check = vec![(Ok(()), None, Some(30))];
 
@@ -352,8 +352,8 @@ fn execute_fixture(fixture: InstrFixture, filename: OsString) {
 
     // assert that is worked and has no error
     if !result.execution_results[0].was_executed() || result.execution_results[0].details().unwrap().status.is_err() {
-        std::println!("{:?}", result.execution_results[0]);
-        std::println!("result: {} -  custom error: {}", output.result, output.custom_err);
+        //std::println!("{:?}", result.execution_results[0]);
+        //std::println!("result: {} -  custom error: {}", output.result, output.custom_err);
         if output.result != 0 {
             return;
         }
@@ -388,7 +388,7 @@ fn execute_fixture(fixture: InstrFixture, filename: OsString) {
 
     for item in &output.modified_accounts {
         let pubkey = Pubkey::new_from_array(item.address.clone().try_into().unwrap());
-        std::println!("looking for: {:?}", pubkey);
+        // std::println!("looking for: {:?}", pubkey);
         let index = *idx_map.get(&pubkey).expect("Account not in expected results");
         let received_data = &result.loaded_transactions[0].0.as_ref()
             .unwrap().accounts[index].1;
@@ -414,6 +414,7 @@ fn execute_fixture(fixture: InstrFixture, filename: OsString) {
     //std::println!("cu: {} - expected: {}", result.execution_results[0].details().unwrap().executed_units, input.cu_avail - output.cu_avail);
     //std::println!("ret: {}", result.execution_results[0].details().unwrap().return_data.is_some());
     //std::println!("expected_ret: {}", output.return_data.len());
+
 
     if let Some(return_data) = &execution_details.return_data {
         assert_eq!(return_data.data, output.return_data);
