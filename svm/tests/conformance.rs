@@ -90,19 +90,19 @@ fn fixture() {
     // let ignore = HashSet::from([
     //     OsString::from("573f54c36f3eca95.bin")
     // ]);
-    // for path in std::fs::read_dir(dir).unwrap() {
-    //     let filename = path.as_ref().unwrap().file_name();
-    //     if ignore.contains(&filename) {
-    //         continue;
-    //     }
-    //     let mut file = File::open(path.as_ref().unwrap().path()).expect("file not found");
-    //     let mut buffer = Vec::new();
-    //     file.read_to_end(&mut buffer).expect("Failed to read file");
-    //     std::println!("Testing: {}", path.unwrap().path().display());
-    //
-    //     let fixture = proto::InstrFixture::decode(buffer.as_slice()).unwrap();
-    //     execute_fixture(fixture);
-    // }
+    for path in std::fs::read_dir(dir).unwrap() {
+        let filename = path.as_ref().unwrap().file_name();
+        // if ignore.contains(&filename) {
+        //     continue;
+        // }
+        let mut file = File::open(path.as_ref().unwrap().path()).expect("file not found");
+        let mut buffer = Vec::new();
+        file.read_to_end(&mut buffer).expect("Failed to read file");
+        std::println!("Testing: {}", path.unwrap().path().display());
+
+        let fixture = proto::InstrFixture::decode(buffer.as_slice()).unwrap();
+        execute_fixture(fixture, filename);
+    }
 
     // system
     // let ignore = HashSet::from([
@@ -179,34 +179,34 @@ fn fixture() {
     //dir.push("0c9471f50baa2b03.bin");
 
     // For debugging
-    dir.push("573f54c36f3eca95.bin");
-
-    let mut file = File::open(dir.clone()).expect("file not found");
-    let mut buffer = Vec::new();
-    file.read_to_end(&mut buffer).expect("Failed to read file");
-
-    let fixture = proto::InstrFixture::decode(buffer.as_slice()).unwrap();
-
-    let program_id = fixture.input.as_ref().unwrap().program_id.clone();
-    std::println!("program id: {:?}", Pubkey::new_from_array(program_id.try_into().unwrap()));
-
-    for item in &fixture.input.as_ref().unwrap().accounts {
-        std::println!("Acct: {:?} => owner: {:?} => lamports: {}",
-                      Pubkey::new_from_array(item.address.clone().try_into().unwrap()),
-            Pubkey::new_from_array(item.owner.clone().try_into().unwrap()),
-            item.lamports
-        );
-    }
-
-    for item in &fixture.input.as_ref().unwrap().instr_accounts {
-        std::println!("idx: {}, writable: {}, signer: {}", item.index, item.is_writable, item.is_signer);
-    }
-
-    std::println!("Has txn context: {:?}", fixture.input.as_ref().unwrap().txn_context.is_some());
-    std::println!("Has slot context: {:?}", fixture.input.as_ref().unwrap().slot_context.is_some());
-    std::println!("Has epoch context: {:?}", fixture.input.as_ref().unwrap().epoch_context.is_some());
-
-    execute_fixture(fixture, dir.file_name().unwrap().to_os_string());
+    // dir.push("573f54c36f3eca95.bin");
+    //
+    // let mut file = File::open(dir.clone()).expect("file not found");
+    // let mut buffer = Vec::new();
+    // file.read_to_end(&mut buffer).expect("Failed to read file");
+    //
+    // let fixture = proto::InstrFixture::decode(buffer.as_slice()).unwrap();
+    //
+    // let program_id = fixture.input.as_ref().unwrap().program_id.clone();
+    // std::println!("program id: {:?}", Pubkey::new_from_array(program_id.try_into().unwrap()));
+    //
+    // for item in &fixture.input.as_ref().unwrap().accounts {
+    //     std::println!("Acct: {:?} => owner: {:?} => lamports: {}",
+    //                   Pubkey::new_from_array(item.address.clone().try_into().unwrap()),
+    //         Pubkey::new_from_array(item.owner.clone().try_into().unwrap()),
+    //         item.lamports
+    //     );
+    // }
+    //
+    // for item in &fixture.input.as_ref().unwrap().instr_accounts {
+    //     std::println!("idx: {}, writable: {}, signer: {}", item.index, item.is_writable, item.is_signer);
+    // }
+    //
+    // std::println!("Has txn context: {:?}", fixture.input.as_ref().unwrap().txn_context.is_some());
+    // std::println!("Has slot context: {:?}", fixture.input.as_ref().unwrap().slot_context.is_some());
+    // std::println!("Has epoch context: {:?}", fixture.input.as_ref().unwrap().epoch_context.is_some());
+    //
+    // execute_fixture(fixture, dir.file_name().unwrap().to_os_string());
 }
 
 fn execute_fixture(fixture: InstrFixture, filename: OsString) {
@@ -272,7 +272,7 @@ fn execute_fixture(fixture: InstrFixture, filename: OsString) {
         for item in input.accounts {
             let pubkey = Pubkey::new_from_array(item.address.try_into().unwrap());
             if bpf_loader_upgradeable::check_id(&pubkey) {
-                break;
+                continue;
             }
 
             let mut account_data = AccountSharedData::default();
@@ -329,7 +329,7 @@ fn execute_fixture(fixture: InstrFixture, filename: OsString) {
     );
 
     batch_processor.fill_missing_sysvar_cache_entries(&mock_bank);
-    mock_bank.set_sysvar(batch_processor.sysvar_cache.read().unwrap().clone());
+    //mock_bank.set_sysvar(batch_processor.sysvar_cache.read().unwrap().clone());
     register_builtins(&batch_processor, &mock_bank);
 
     let mut error_counter = TransactionErrorMetrics::default();
@@ -356,8 +356,8 @@ fn execute_fixture(fixture: InstrFixture, filename: OsString) {
 
     // assert that is worked and has no error
     if !result.execution_results[0].was_executed() || result.execution_results[0].details().unwrap().status.is_err() {
-        std::println!("{:?}", result.execution_results[0]);
-        std::println!("result: {} -  custom error: {}", output.result, output.custom_err);
+        // std::println!("{:?}", result.execution_results[0]);
+        // std::println!("result: {} -  custom error: {}", output.result, output.custom_err);
         if output.result != 0 {
             return;
         }
@@ -392,7 +392,7 @@ fn execute_fixture(fixture: InstrFixture, filename: OsString) {
 
     for item in &output.modified_accounts {
         let pubkey = Pubkey::new_from_array(item.address.clone().try_into().unwrap());
-        std::println!("looking for: {:?}", pubkey);
+        // std::println!("looking for: {:?}", pubkey);
         let index = *idx_map.get(&pubkey).expect("Account not in expected results");
         let received_data = &result.loaded_transactions[0].0.as_ref()
             .unwrap().accounts[index].1;
