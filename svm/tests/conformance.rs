@@ -76,6 +76,7 @@ impl ForkGraph for MockForkGraph {
 
 // TODO:
 // Should fetch the test-vectors during runtime
+// Commit: b099614f872612fcf3752328a0246a8cbaf3d417
 
 #[test]
 fn fixture() {
@@ -83,7 +84,7 @@ fn fixture() {
     dir.push("test-vectors");
     dir.push("instr");
     dir.push("fixtures");
-    dir.push("20240425");
+    // dir.push("20240425");
     dir.push("bpf-loader");
 
     // bpf-loader
