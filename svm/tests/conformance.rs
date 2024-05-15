@@ -14,7 +14,7 @@ use solana_program_runtime::solana_rbpf::program::{BuiltinProgram, FunctionRegis
 use solana_program_runtime::solana_rbpf::vm::Config;
 use solana_program_runtime::timings::ExecuteTimings;
 use solana_sdk::account::{AccountSharedData, ReadableAccount, WritableAccount};
-use solana_sdk::bpf_loader_upgradeable;
+use solana_sdk::{bpf_loader_upgradeable, feature_set};
 use solana_sdk::clock::{Epoch, Slot};
 use solana_sdk::epoch_schedule::EpochSchedule;
 use solana_sdk::feature_set::{FEATURE_NAMES, FeatureSet};
@@ -130,24 +130,12 @@ fn fixture() {
     //     execute_fixture(fixture, filename);
     // }
 
-    // vote
+    // vote ==> DONE!
     // let ignore = HashSet::from([
-    //     // Lamports disagree
-    //     OsString::from("16e004f6282214fb.bin"),
-    //     OsString::from("46554d839980adaa.bin"),
-    //     OsString::from("efb039175e24951f.bin"),
-    //     OsString::from("548eadba9731d55d.bin"),
-    //     OsString::from("05073bd8b165c05c.bin"),
-    //     OsString::from("27b566f38c90701d.bin"),
-    //     OsString::from("5b1ca8102f32ff40.bin"),
-    //     OsString::from("f1474c2d42bfa1c3.bin"),
-    //     OsString::from("89596672771d2ce0.bin"),
-    //     OsString::from("4f08f332c85ae207.bin"),
-    //     OsString::from("9e4bf65f3dbd9571.bin"),
-    //     OsString::from("6b49c546301c5d8f.bin"),
+    //     // Let's not collect rent
     //     // Failed transaction
-    //     OsString::from("2b9c4987d3ddae11.bin"),
-    //     OsString::from("fabd5841eee1c39a.bin"),
+    //     OsString::from("2b9c4987d3ddae11.bin"), // Do not use the set of reserved accounts!
+    //     OsString::from("fabd5841eee1c39a.bin"), // Do not use the set of reserved accounts!
     // ]);
     // for path in std::fs::read_dir(dir).unwrap() {
     //     let filename = path.as_ref().unwrap().file_name();
@@ -188,7 +176,7 @@ fn fixture() {
     //dir.push("0c9471f50baa2b03.bin");
 
     // For debugging
-    dir.push("16e004f6282214fb.bin");
+    dir.push("2b9c4987d3ddae11.bin");
 
     let mut file = File::open(dir.clone()).expect("file not found");
     let mut buffer = Vec::new();
@@ -262,6 +250,7 @@ fn execute_fixture(fixture: InstrFixture, filename: OsString) {
         }
     }
 
+    feature_set.activate(&feature_set::disable_rent_fees_collection::id(), 40);
     let fee_payer = Pubkey::new_unique();
     let Ok(transaction) = transaction_builder.build(
         Hash::default(), (fee_payer, Signature::new_unique()), false
@@ -270,7 +259,7 @@ fn execute_fixture(fixture: InstrFixture, filename: OsString) {
         return;
     };
 
-    //std::println!("transaction: {:#?}", transaction);
+    std::println!("transaction: {:#?}", transaction);
     let transactions = vec![transaction];
     let mut transaction_check = vec![(Ok(()), None, Some(30))];
 
@@ -363,8 +352,8 @@ fn execute_fixture(fixture: InstrFixture, filename: OsString) {
 
     // assert that is worked and has no error
     if !result.execution_results[0].was_executed() || result.execution_results[0].details().unwrap().status.is_err() {
-        //std::println!("{:?}", result.execution_results[0]);
-        //std::println!("result: {} -  custom error: {}", output.result, output.custom_err);
+        std::println!("{:?}", result.execution_results[0]);
+        std::println!("result: {} -  custom error: {}", output.result, output.custom_err);
         if output.result != 0 {
             return;
         }
