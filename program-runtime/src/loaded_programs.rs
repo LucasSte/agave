@@ -390,6 +390,7 @@ impl ProgramCacheEntry {
         let load_elf_time = Measure::start("load_elf_time");
         // The following unused_mut exception is needed for architectures that do not
         // support JIT compilation.
+
         #[allow(unused_mut)]
         let mut executable = Executable::load(elf_bytes, program_runtime_environment.clone())?;
         metrics.load_elf_us = load_elf_time.end_as_us();
@@ -401,7 +402,6 @@ impl ProgramCacheEntry {
         }
 
         // TODO: This is to simulate a delay in jit on ARM.
-        thread::sleep(Duration::from_millis(4000));
         #[cfg(all(not(target_os = "windows"), target_arch = "x86_64"))]
         {
             let jit_compile_time = Measure::start("jit_compile_time");
@@ -1112,6 +1112,9 @@ impl<FG: ForkGraph> ProgramCache<FG> {
                                 std::thread::current().id(),
                             ));
                             cooperative_loading_task = Some((*key, *usage_count));
+                            //std::println!("No one loading: {:?}", thread::current().id());
+                        } else {
+                            std::println!("Already loading this one!");
                         }
                     }
                     true
@@ -1142,6 +1145,7 @@ impl<FG: ForkGraph> ProgramCache<FG> {
             IndexImplementation::V1 {
                 loading_entries, ..
             } => {
+                //std::println!("thread removing: {:?}", thread::current().id());
                 let loading_thread = loading_entries.get_mut().unwrap().remove(&key);
                 debug_assert_eq!(loading_thread, Some((slot, std::thread::current().id())));
                 // Check that it will be visible to our own fork once inserted

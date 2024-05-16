@@ -51,6 +51,8 @@ use {
 
 #[cfg(not(feature = "loom-test"))]
 use std::sync::{atomic::Ordering, Arc, RwLock};
+use std::thread;
+use std::time::Duration;
 
 #[cfg(feature = "loom-test")]
 use loom::sync::{atomic::Ordering, Arc, RwLock};
@@ -392,6 +394,7 @@ impl<FG: ForkGraph> TransactionBatchProcessor<FG> {
                 .collect();
 
         let mut loaded_programs_for_txs = None;
+        //std::println!("entering loop");
         loop {
             let (program_to_store, task_cookie, task_waiter) = {
                 // Lock the global cache.
@@ -424,6 +427,8 @@ impl<FG: ForkGraph> TransactionBatchProcessor<FG> {
                         false,
                     )
                     .expect("called load_program_with_pubkey() with nonexistent account");
+                    //thread::sleep(Duration::from_millis(1000));
+                    //loom::thread::yield_now();
                     program.tx_usage_counter.store(count, Ordering::Relaxed);
                     (key, program)
                 });
@@ -432,7 +437,9 @@ impl<FG: ForkGraph> TransactionBatchProcessor<FG> {
                 (program_to_store, task_waiter.cookie(), task_waiter)
                 // Unlock the global cache again.
             };
+            //thread::sleep(Duration::from_millis(1000));
 
+            //loom::thread::yield_now();
             if let Some((key, program)) = program_to_store {
                 let mut program_cache = self.program_cache.write().unwrap();
                 // Submit our last completed loading task.
@@ -757,6 +764,7 @@ mod tests {
     use std::{env, fs};
     use std::fs::File;
     use std::io::Read;
+    use loom::sync::atomic::AtomicU64;
     use {
         super::*,
         solana_program_runtime::loaded_programs::{BlockRelation, ProgramCacheEntryType},
@@ -1632,6 +1640,7 @@ mod tests {
         dir.push(name.as_str());
         let name = name.replace('-', "_");
         dir.push(name + "_program.so");
+        std::println!("dir: {:?}", dir);
         let mut file = File::open(dir.clone()).expect("file not found");
         let metadata = fs::metadata(dir).expect("Unable to read metadata");
         let mut buffer = vec![0; metadata.len() as usize];
@@ -1688,9 +1697,14 @@ mod tests {
     fn concurrent_cache() {
         use loom::sync::{Arc, RwLock};
         use loom::thread;
+        use loom::sync::atomic;
+
+        let mut buffer1 = load_program("clock-sysvar".to_string());
+
+        //std::println!("{:?}", buffer1);
 
         loom::model(move || {
-            std::println!("Mock");
+            let mut num : u64 = 1;
             let mut mock_bank = MockBankCallback {
       //          feature_set: Arc::new(FeatureSet::default()),
                 rent_collector: RentCollector::default(),
@@ -1699,17 +1713,17 @@ mod tests {
             let batch_processor = TransactionBatchProcessor::<TestForkGraph>::default();
             batch_processor.program_cache.write().unwrap().fork_graph =
                 Some(Arc::new(RwLock::new(TestForkGraph {})));
-            //
-            let clock_program = deploy_program("clock-sysvar".to_string(), &mut mock_bank);
-            let transfer_program = deploy_program("simple-transfer".to_string(), &mut mock_bank);
-            let hello_program = deploy_program("hello-solana".to_string(), &mut mock_bank);
+
+            let clock_program = deploy_program_c(&mut buffer1.clone(), &mut mock_bank, &mut num);
+            let transfer_program = deploy_program_c(&mut buffer1.clone(), &mut mock_bank, &mut num);
+            let hello_program = deploy_program_c(&mut buffer1.clone(), &mut mock_bank, &mut num);
 
             let mut account_maps: HashMap<Pubkey, u64> = HashMap::new();
             account_maps.insert(clock_program, 2);
             account_maps.insert(transfer_program, 1);
-            account_maps.insert(hello_program, 0);
+             account_maps.insert(hello_program, 0);
 
-            let ths: Vec<_> = (0..1)
+            let ths: Vec<_> = (0..4)
                 .map(|_| {
                     let local_bank = mock_bank.clone();
                     let processor = TransactionBatchProcessor::new(
@@ -1722,11 +1736,16 @@ mod tests {
                     );
                     let maps = account_maps.clone();
                     thread::spawn(move || {
+                        //std::println!("Dispatching: {:?}", thread::current().id());
                         let result = processor.replenish_program_cache(
                             &local_bank,
                             &maps,
                             true
                         );
+
+                        assert_eq!(result.hit_max_limit, false);
+                        //std::println!("res: {} -> id: {:?}", result.loaded_missing, thread::current().id());
+                        // std::println!("{:?}", result);
                         // let clock = result.find(&clock_program);
                         // assert!(clock.is_some());
                         // let transfer = result.find(&transfer_program);
@@ -1736,6 +1755,64 @@ mod tests {
                     })
                 })
                 .collect();
+
+            for th in ths {
+                th.join().unwrap();
+            }
         });
+    }
+
+    fn deploy_program_c(buffer: &mut Vec<u8>, mock_bank: &mut MockBankCallback, num: &mut u64) -> Pubkey {
+
+        let mut b = [0; 32];
+        *num = *num + 1;
+        b[0..8].copy_from_slice(&num.to_be_bytes());
+
+
+        let program_account = Pubkey::new_from_array(b);
+
+        let mut b = [0; 32];
+        *num = *num + 1;
+        b[0..8].copy_from_slice(&num.to_be_bytes());
+
+        let program_data_account = Pubkey::new_from_array(b);
+        let state = UpgradeableLoaderState::Program {
+            programdata_address: program_data_account,
+        };
+
+        // The program account must have funds and hold the executable binary
+        let mut account_data = AccountSharedData::default();
+        account_data.set_data(bincode::serialize(&state).unwrap());
+        account_data.set_lamports(25);
+        account_data.set_owner(bpf_loader_upgradeable::id());
+        mock_bank
+            .account_shared_data
+            .write()
+            .unwrap()
+            .insert(program_account, account_data);
+
+        let mut account_data = AccountSharedData::default();
+        let state = UpgradeableLoaderState::ProgramData {
+            slot: 0,
+            upgrade_authority_address: None,
+        };
+        let mut header = bincode::serialize(&state).unwrap();
+        let mut complement = vec![
+            0;
+            std::cmp::max(
+                0,
+                UpgradeableLoaderState::size_of_programdata_metadata().saturating_sub(header.len())
+            )
+        ];
+        header.append(&mut complement);
+        header.append(buffer);
+        account_data.set_data(header);
+        mock_bank
+            .account_shared_data
+            .write()
+            .unwrap()
+            .insert(program_data_account, account_data);
+
+        program_account
     }
 }
