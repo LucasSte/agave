@@ -1746,12 +1746,12 @@ mod tests {
                         assert_eq!(result.hit_max_limit, false);
                         //std::println!("res: {} -> id: {:?}", result.loaded_missing, thread::current().id());
                         // std::println!("{:?}", result);
-                        // let clock = result.find(&clock_program);
-                        // assert!(clock.is_some());
-                        // let transfer = result.find(&transfer_program);
-                        // assert!(transfer.is_some());
-                        // let hello = result.find(&transfer_program);
-                        // assert!(hello.is_some());
+                        let clock = result.find(&clock_program);
+                        assert!(matches!(clock.unwrap().program, ProgramCacheEntryType::DelayVisibility));
+                        let transfer = result.find(&transfer_program);
+                        assert!(matches!(transfer.unwrap().program, ProgramCacheEntryType::DelayVisibility));
+                        let hello = result.find(&transfer_program);
+                        assert!(matches!(hello.unwrap().program, ProgramCacheEntryType::DelayVisibility));
                     })
                 })
                 .collect();
