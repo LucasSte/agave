@@ -55,7 +55,7 @@ use {
 };
 
 // TODO: Fix me
-use loom::sync::{atomic::Ordering, Arc};
+use shuttle::sync::{atomic::Ordering, Arc};
 
 pub const DEFAULT_LOADER_COMPUTE_UNITS: u64 = 570;
 pub const DEPRECATED_LOADER_COMPUTE_UNITS: u64 = 1_140;

@@ -48,7 +48,7 @@ use {
 use std::sync::{atomic::Ordering, Arc};
 
 #[cfg(feature = "loom-test")]
-use loom::sync::{atomic::Ordering, Arc};
+use shuttle::sync::{atomic::Ordering, Arc};
 
 
 pub type BuiltinFunctionWithContext = BuiltinFunction<InvokeContext<'static>>;
@@ -679,7 +679,7 @@ macro_rules! with_mock_invoke_context {
         use std::sync::Arc;
 
         #[cfg(feature = "loom-test")]
-        use loom::sync::Arc;
+        use shuttle::sync::Arc;
 
         use {
             solana_compute_budget::compute_budget::ComputeBudget,

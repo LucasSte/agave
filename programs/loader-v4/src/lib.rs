@@ -37,7 +37,7 @@ use {
 };
 
 // TODO: Fix-me
-use loom::sync::{atomic::Ordering, Arc};
+use shuttle::sync::{atomic::Ordering, Arc};
 
 pub const DEFAULT_COMPUTE_UNITS: u64 = 2_000;
 

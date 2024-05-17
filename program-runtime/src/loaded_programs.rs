@@ -35,7 +35,7 @@ use std::sync::{
 };
 
 #[cfg(feature = "loom-test")]
-use loom::sync::{
+use shuttle::sync::{
     atomic::{AtomicU64, Ordering},
     Arc, Condvar, Mutex, RwLock,
 };

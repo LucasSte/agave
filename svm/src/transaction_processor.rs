@@ -56,7 +56,7 @@ use std::thread;
 use std::time::Duration;
 
 #[cfg(feature = "loom-test")]
-use loom::sync::{atomic::Ordering, Arc, RwLock};
+use shuttle::sync::{atomic::Ordering, Arc, RwLock};
 
 /// A list of log messages emitted during a transaction
 pub type TransactionLogMessages = Vec<String>;
@@ -851,7 +851,7 @@ mod tests {
     use std::{env, fs};
     use std::fs::File;
     use std::io::Read;
-    use loom::sync::atomic::AtomicU64;
+    use shuttle::sync::atomic::AtomicU64;
     use {
         super::*,
         crate::account_loader::CheckedTransactionDetails,
@@ -1794,15 +1794,15 @@ mod tests {
     #[test]
     #[cfg(feature = "loom-test")]
     fn concurrent_cache() {
-        use loom::sync::{Arc, RwLock};
-        use loom::thread;
-        use loom::sync::atomic;
+        use shuttle::sync::{Arc, RwLock};
+        use shuttle::thread;
+        use shuttle::sync::atomic;
 
         let mut buffer1 = load_program("clock-sysvar".to_string());
 
         //std::println!("{:?}", buffer1);
 
-        loom::model(move || {
+        shuttle::check_pct(move || {
             let mut num : u64 = 1;
             let mut mock_bank = MockBankCallback {
       //          feature_set: Arc::new(FeatureSet::default()),
@@ -1858,7 +1858,7 @@ mod tests {
             for th in ths {
                 th.join().unwrap();
             }
-        });
+        }, 25, 5);
     }
 
     fn deploy_program_c(buffer: &mut Vec<u8>, mock_bank: &mut MockBankCallback, num: &mut u64) -> Pubkey {

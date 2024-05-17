@@ -19,7 +19,7 @@ use {
 use std::sync::Arc;
 
 #[cfg(feature = "loom-test")]
-use loom::sync::Arc;
+use shuttle::sync::Arc;
 
 #[cfg(all(RUSTC_WITH_SPECIALIZATION, feature = "frozen-abi"))]
 impl ::solana_frozen_abi::abi_example::AbiExample for SysvarCache {

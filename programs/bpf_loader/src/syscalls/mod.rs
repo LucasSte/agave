@@ -67,7 +67,7 @@ use {
 };
 
 // TODO: Fix me
-use loom::sync::Arc;
+use shuttle::sync::Arc;
 
 mod cpi;
 mod logging;

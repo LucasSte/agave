@@ -12,7 +12,7 @@ edition = { workspace = true }
 [dependencies]
 itertools = { workspace = true }
 log = { workspace = true }
-loom = { workspace = true, optional = true}
+shuttle = { workspace = true, optional = true}
 percentage = { workspace = true }
 serde = { workspace = true, features = ["rc"] }
 serde_derive = { workspace = true }
@@ -58,4 +58,4 @@ frozen-abi = [
     "solana-program-runtime/frozen-abi",
     "solana-sdk/frozen-abi",
 ]
-loom-test = ["solana-program-runtime/loom-test", "dep:loom"]
+loom-test = ["solana-program-runtime/loom-test", "dep:shuttle"]

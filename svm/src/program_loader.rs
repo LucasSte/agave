@@ -24,7 +24,7 @@ use {
 use std::sync::Arc;
 
 #[cfg(feature = "loom-test")]
-use loom::sync::Arc;
+use shuttle::sync::Arc;
 
 
 #[derive(Debug)]

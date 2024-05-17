@@ -169,7 +169,7 @@ mod tests {
     };
 
     // TODO: Fix-me
-    use loom::sync::Arc;
+    use shuttle::sync::Arc;
 
     #[derive(Debug, serde_derive::Serialize, serde_derive::Deserialize)]
     enum MockInstruction {

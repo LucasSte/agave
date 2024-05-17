@@ -249,7 +249,8 @@ libsecp256k1 = { version = "0.6.0", default-features = false, features = [
 ] }
 light-poseidon = "0.2.0"
 log = "0.4.21"
-loom = {path = "/Users/lucasste/Documents/loom"}
+# loom = {path = "/Users/lucasste/Documents/loom"}
+shuttle = { path = "/Users/lucasste/Documents/shuttle"}
 lru = "0.7.7"
 lz4 = "1.24.0"
 memmap2 = "0.5.10"

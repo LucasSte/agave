@@ -517,7 +517,7 @@ mod tests {
     };
 
     // TODO: Fix-me
-    use loom::sync::Arc;
+    use shuttle::sync::Arc;
 
     #[derive(Default)]
     struct TestCallbacks {
