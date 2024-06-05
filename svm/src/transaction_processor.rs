@@ -518,10 +518,10 @@ impl<FG: ForkGraph> TransactionBatchProcessor<FG> {
                 ) {
                     recompiled
                         .tx_usage_counter
-                        .fetch_add(program_to_recompile.tx_usage_counter.load(Relaxed), Relaxed);
+                        .fetch_add(program_to_recompile.tx_usage_counter.load(Ordering::Relaxed), Ordering::Relaxed);
                     recompiled
                         .ix_usage_counter
-                        .fetch_add(program_to_recompile.ix_usage_counter.load(Relaxed), Relaxed);
+                        .fetch_add(program_to_recompile.ix_usage_counter.load(Ordering::Relaxed), Ordering::Relaxed);
                     let mut program_cache = self.program_cache.write().unwrap();
                     program_cache.assign_program(key, recompiled);
                 }
@@ -848,10 +848,6 @@ impl<FG: ForkGraph> TransactionBatchProcessor<FG> {
 
 #[cfg(test)]
 mod tests {
-    use std::{env, fs};
-    use std::fs::File;
-    use std::io::Read;
-    use shuttle::sync::atomic::AtomicU64;
     use {
         super::*,
         crate::account_loader::CheckedTransactionDetails,
@@ -877,11 +873,8 @@ mod tests {
             env,
             fs::{self, File},
             io::Read,
-            thread,
         },
     };
-    use solana_sdk::bpf_loader_upgradeable;
-    use solana_sdk::bpf_loader_upgradeable::UpgradeableLoaderState;
 
     fn new_unchecked_sanitized_message(message: Message) -> SanitizedMessage {
         SanitizedMessage::Legacy(LegacyMessage::new(
@@ -1825,13 +1818,8 @@ mod tests {
             let ths: Vec<_> = (0..4)
                 .map(|_| {
                     let local_bank = mock_bank.clone();
-                    let processor = TransactionBatchProcessor::new(
-                        batch_processor.slot,
-                        batch_processor.epoch,
-                        batch_processor.epoch_schedule.clone(),
-                        batch_processor.runtime_config.clone(),
-                        batch_processor.program_cache.clone(),
-                        HashSet::new()
+                    let processor = batch_processor.new_from(
+                        batch_processor.slot, batch_processor.epoch
                     );
                     let maps = account_maps.clone();
                     thread::spawn(move || {
