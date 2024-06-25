@@ -9037,6 +9037,7 @@ fn test_epoch_schedule_from_genesis_config() {
         None,
         None,
         Arc::default(),
+        None,
     ));
 
     assert_eq!(bank.epoch_schedule(), &genesis_config.epoch_schedule);
@@ -9067,6 +9068,7 @@ where
         None,
         None,
         Arc::default(),
+        None,
     ));
     let vote_and_stake_accounts =
         load_vote_and_stake_accounts(&bank).vote_with_stake_delegations_map;
@@ -12604,6 +12606,7 @@ fn test_rehash_with_skipped_rewrites() {
         None,
         Some(Pubkey::new_unique()),
         Arc::new(AtomicBool::new(false)),
+        None,
     ));
     // This test is only meaningful while the bank hash contains rewrites.
     // Once this feature is enabled, it may be possible to remove this test entirely.
@@ -12665,6 +12668,7 @@ fn test_rebuild_skipped_rewrites() {
         None,
         Some(Pubkey::new_unique()),
         Arc::new(AtomicBool::new(false)),
+        None,
     ));
     // This test is only meaningful while the bank hash contains rewrites.
     // Once this feature is enabled, it may be possible to remove this test entirely.
@@ -12775,6 +12779,7 @@ fn test_get_accounts_for_bank_hash_details(skip_rewrites: bool) {
         None,
         Some(Pubkey::new_unique()),
         Arc::new(AtomicBool::new(false)),
+        None,
     ));
     // This test is only meaningful while the bank hash contains rewrites.
     // Once this feature is enabled, it may be possible to remove this test entirely.
