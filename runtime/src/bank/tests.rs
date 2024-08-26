@@ -9099,6 +9099,7 @@ where
         None,
         Arc::default(),
         None,
+        None,
     ));
     let vote_and_stake_accounts =
         load_vote_and_stake_accounts(&bank).vote_with_stake_delegations_map;
@@ -14019,6 +14020,7 @@ fn test_rehash_with_skipped_rewrites() {
         Some(Pubkey::new_unique()),
         Arc::new(AtomicBool::new(false)),
         None,
+        None,
     ));
     // This test is only meaningful while the bank hash contains rewrites.
     // Once this feature is enabled, it may be possible to remove this test entirely.
@@ -14080,6 +14082,7 @@ fn test_rebuild_skipped_rewrites() {
         None,
         Some(Pubkey::new_unique()),
         Arc::new(AtomicBool::new(false)),
+        None,
         None,
     ));
     // This test is only meaningful while the bank hash contains rewrites.
