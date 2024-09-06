@@ -4,7 +4,7 @@ use {
 };
 
 impl Bank {
-    pub(crate) fn fill_missing_sysvar_cache_entries(&self) {
+    pub fn fill_missing_sysvar_cache_entries(&self) {
         let mut sysvar_cache = self.sysvar_cache.write().unwrap();
         sysvar_cache.fill_missing_entries(|pubkey, callback| {
             if let Some(account) = self.get_account_with_fixed_root(pubkey) {
@@ -13,7 +13,7 @@ impl Bank {
         });
     }
 
-    pub(crate) fn reset_sysvar_cache(&self) {
+    pub fn reset_sysvar_cache(&self) {
         let mut sysvar_cache = self.sysvar_cache.write().unwrap();
         sysvar_cache.reset();
     }

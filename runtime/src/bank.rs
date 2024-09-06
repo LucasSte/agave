@@ -2235,7 +2235,7 @@ impl Bank {
         }
     }
 
-    fn update_rent(&self) {
+    pub fn update_rent(&self) {
         self.update_sysvar_account(&sysvar::rent::id(), |account| {
             create_account(
                 &self.rent_collector.rent,
@@ -2244,7 +2244,7 @@ impl Bank {
         });
     }
 
-    fn update_epoch_schedule(&self) {
+    pub fn update_epoch_schedule(&self) {
         self.update_sysvar_account(&sysvar::epoch_schedule::id(), |account| {
             create_account(
                 self.epoch_schedule(),
