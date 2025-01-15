@@ -750,9 +750,10 @@ fn build_solana_package(
         // Replace with -Zsplit-debuginfo=packed when stabilized.
         target_rustflags = Cow::Owned(format!("{} -g", &target_rustflags));
     }
-    if config.arch == "sbfv2" {
-        target_rustflags = Cow::Owned(format!("{} -C target_cpu=sbfv2", &target_rustflags));
-    }
+    // if config.arch == "sbfv2" {
+    target_rustflags = Cow::Owned(format!("{} -C target_cpu=v3", &target_rustflags));
+    target_rustflags = Cow::Owned(format!("{} -C target_feature=+static-syscalls", &target_rustflags));
+    //}
     if let Cow::Owned(flags) = target_rustflags {
         env::set_var(cargo_target, flags);
     }
@@ -771,9 +772,9 @@ fn build_solana_package(
     };
 
     cargo_build_args.append(&mut vec!["build", "--release", "--target", target]);
-    if config.arch == "sbfv2" {
-        cargo_build_args.push("-Zbuild-std=std,panic_abort");
-    }
+    // if config.arch == "sbfv2" {
+    cargo_build_args.push("-Zbuild-std=std,panic_abort");
+    // }
     if config.no_default_features {
         cargo_build_args.push("--no-default-features");
     }

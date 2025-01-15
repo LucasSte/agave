@@ -8918,8 +8918,6 @@ version = "2.2.0"
 [[package]]
 name = "solana-sbpf"
 version = "0.9.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "92b4c060a707fdb0754a876cbbf49591b60a573b5521b485125d2a4d6ff68ce3"
 dependencies = [
  "byteorder",
  "combine 3.8.1",

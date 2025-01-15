@@ -290,23 +290,26 @@ pub fn create_program_runtime_environment_v1<'a>(
     let get_sysvar_syscall_enabled = feature_set.is_active(&get_sysvar_syscall_enabled::id());
     let enable_get_epoch_stake_syscall =
         feature_set.is_active(&enable_get_epoch_stake_syscall::id());
-    let min_sbpf_version = if !feature_set.is_active(&disable_sbpf_v0_execution::id())
-        || feature_set.is_active(&reenable_sbpf_v0_execution::id())
-    {
-        SBPFVersion::V0
-    } else {
-        SBPFVersion::V3
-    };
-    let max_sbpf_version = if feature_set.is_active(&enable_sbpf_v3_deployment_and_execution::id())
-    {
-        SBPFVersion::V3
-    } else if feature_set.is_active(&enable_sbpf_v2_deployment_and_execution::id()) {
-        SBPFVersion::V2
-    } else if feature_set.is_active(&enable_sbpf_v1_deployment_and_execution::id()) {
-        SBPFVersion::V1
-    } else {
-        SBPFVersion::V0
-    };
+    // let min_sbpf_version = if !feature_set.is_active(&disable_sbpf_v0_execution::id())
+    //     || feature_set.is_active(&reenable_sbpf_v0_execution::id())
+    // {
+    //     SBPFVersion::V0
+    // } else {
+    //     SBPFVersion::V3
+    // };
+    let min_sbpf_version = SBPFVersion::V0;
+    // let max_sbpf_version = if feature_set.is_active(&enable_sbpf_v3_deployment_and_execution::id())
+    // {
+    //     SBPFVersion::V3
+    // } else if feature_set.is_active(&enable_sbpf_v2_deployment_and_execution::id()) {
+    //     SBPFVersion::V2
+    // } else if feature_set.is_active(&enable_sbpf_v1_deployment_and_execution::id()) {
+    //     SBPFVersion::V1
+    // } else {
+    //     SBPFVersion::V0
+    // };
+
+    let max_sbpf_version = SBPFVersion::V3;
     debug_assert!(min_sbpf_version <= max_sbpf_version);
 
     let config = Config {
