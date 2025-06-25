@@ -7,9 +7,9 @@ use {
 /// This is how a slice is represented in the VM.
 /// It should be merged with VmSlice in a future refactor.
 #[repr(C)]
-struct GuestSliceReference {
-    pointer: u64,
-    length: u64,
+pub(crate) struct GuestSliceReference {
+    pub(crate) pointer: u64,
+    pub(crate) length: u64,
 }
 
 /// The Return data scratchpad
@@ -68,6 +68,7 @@ impl RuntimeGuestTransaction {
         None
     }
 
+    // TODO: This is supposed to become the new Transaction Context
     pub(crate) fn new(
         transaction_context: &TransactionContext,
         num_instructions: usize,

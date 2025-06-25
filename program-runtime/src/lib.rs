@@ -8,6 +8,7 @@ extern crate solana_metrics;
 
 pub use solana_sbpf;
 pub mod execution_budget;
+mod guest_instruction;
 pub mod guest_transaction;
 pub mod invoke_context;
 pub mod loaded_programs;
