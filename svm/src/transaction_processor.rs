@@ -842,6 +842,14 @@ impl<FG: ForkGraph> TransactionBatchProcessor<FG> {
 
         let compute_budget = loaded_transaction.compute_budget;
 
+        // The transaction mapping for ABIv2 is created eagerly when the feature is enabled.
+        // Since most transactions won't use ABIv2 in the beginning, we could switch to a lazy
+        // creation, instantiating it only when an instruction requires ABIv2.
+        let guest_transaction_abi_v2 = RuntimeGuestTransaction::new_with_feature_set(
+            &transaction_accounts,
+            tx,
+            &environment.feature_set,
+        );        
         let mut transaction_context = TransactionContext::new(
             transaction_accounts,
             rent_collector.get_rent().clone(),
@@ -870,15 +878,7 @@ impl<FG: ForkGraph> TransactionBatchProcessor<FG> {
 
         let mut executed_units = 0u64;
         let sysvar_cache = &self.sysvar_cache.read().unwrap();
-
-        // The transaction mapping for ABIv2 is created eagerly when the feature is enabled.
-        // Since most transactions won't use ABIv2 in the beginning, we could switch to a lazy
-        // creation, instantiating it only when an instruction requires ABIv2.
-        let guest_transaction_abi_v2 = RuntimeGuestTransaction::new_with_feature_set(
-            &transaction_context,
-            tx.num_instructions(),
-            &environment.feature_set,
-        );
+        
         let mut invoke_context = InvokeContext::new(
             &mut transaction_context,
             program_cache_for_tx_batch,

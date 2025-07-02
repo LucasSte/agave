@@ -214,7 +214,7 @@ mod tests {
                 create_loadable_account_for_test("mock_system_program"),
             ),
         ];
-        let mut transaction_context = TransactionContext::new(accounts, Rent::default(), 1, 3);
+        let mut transaction_context = TransactionContext::new(accounts.clone(), Rent::default(), 1, 3);
         let program_indices = vec![vec![2]];
         let mut program_cache_for_tx_batch = ProgramCacheForTxBatch::default();
         program_cache_for_tx_batch.replenish(
@@ -257,7 +257,7 @@ mod tests {
             &sysvar_cache,
         );
         let abi_v2_guest_transaction = RuntimeGuestTransaction::new_with_feature_set(
-            &transaction_context,
+            &accounts,
             message.num_instructions(),
             &feature_set,
         );
@@ -317,7 +317,7 @@ mod tests {
             &sysvar_cache,
         );
         let abi_v2_guest_transaction = RuntimeGuestTransaction::new_with_feature_set(
-            &transaction_context,
+            &accounts,
             message.num_instructions(),
             &feature_set,
         );
@@ -367,7 +367,7 @@ mod tests {
             &sysvar_cache,
         );
         let abi_v2_guest_transaction = RuntimeGuestTransaction::new_with_feature_set(
-            &transaction_context,
+            &accounts,
             message.num_instructions(),
             &feature_set,
         );
@@ -468,7 +468,7 @@ mod tests {
                 create_loadable_account_for_test("mock_system_program"),
             ),
         ];
-        let mut transaction_context = TransactionContext::new(accounts, Rent::default(), 1, 3);
+        let mut transaction_context = TransactionContext::new(accounts.clone(), Rent::default(), 1, 3);
         let program_indices = vec![vec![2]];
         let mut program_cache_for_tx_batch = ProgramCacheForTxBatch::default();
         program_cache_for_tx_batch.replenish(
@@ -510,7 +510,7 @@ mod tests {
         );
 
         let abi_v2_guest_transaction = RuntimeGuestTransaction::new_with_feature_set(
-            &transaction_context,
+            &accounts,
             message.num_instructions(),
             &feature_set,
         );
@@ -556,7 +556,7 @@ mod tests {
         );
 
         let abi_v2_guest_transaction = RuntimeGuestTransaction::new_with_feature_set(
-            &transaction_context,
+            &accounts,
             message.num_instructions(),
             &feature_set,
         );
@@ -598,7 +598,7 @@ mod tests {
             &sysvar_cache,
         );
         let abi_v2_guest_transaction = RuntimeGuestTransaction::new_with_feature_set(
-            &transaction_context,
+            &accounts,
             message.num_instructions(),
             &feature_set,
         );
@@ -704,8 +704,7 @@ mod tests {
             (solana_secp256r1_program::id(), secp256r1_account),
             (mock_program_id, mock_program_account),
         ];
-        let mut transaction_context = TransactionContext::new(accounts, Rent::default(), 1, 4);
-
+        let mut transaction_context = TransactionContext::new(accounts.clone(), Rent::default(), 1, 4);
         let message = new_sanitized_message(Message::new(
             &[
                 secp256k1_instruction_for_test(),
@@ -715,6 +714,14 @@ mod tests {
             ],
             Some(transaction_context.get_key_of_account_at_index(0).unwrap()),
         ));
+        let feature_set = SVMFeatureSet::all_enabled();
+
+        let abi_v2_guest_transaction = RuntimeGuestTransaction::new_with_feature_set(
+            &accounts,
+            message.num_instructions(),
+            &feature_set,
+        );
+
         let sysvar_cache = SysvarCache::default();
         let mut program_cache_for_tx_batch = ProgramCacheForTxBatch::default();
         program_cache_for_tx_batch.replenish(
@@ -743,18 +750,12 @@ mod tests {
                 }
             }
         }
-        let feature_set = SVMFeatureSet::all_enabled();
         let environment_config = EnvironmentConfig::new(
             Hash::default(),
             0,
             &MockCallback {},
             &feature_set,
             &sysvar_cache,
-        );
-        let abi_v2_guest_transaction = RuntimeGuestTransaction::new_with_feature_set(
-            &transaction_context,
-            message.num_instructions(),
-            &feature_set,
         );
         let mut invoke_context = InvokeContext::new(
             &mut transaction_context,

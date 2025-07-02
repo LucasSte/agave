@@ -16,6 +16,7 @@ pub mod mem_pool;
 pub mod serialization;
 pub mod stable_log;
 pub mod sysvar_cache;
+mod guest_slice;
 
 // re-exports for macros
 pub mod __private {

@@ -13,7 +13,6 @@ use {
     solana_instruction::error::InstructionError,
     solana_loader_v3_interface::state::UpgradeableLoaderState,
     solana_program_runtime::{
-        guest_transaction::RuntimeGuestTransaction,
         invoke_context::{EnvironmentConfig, InvokeContext},
         loaded_programs::ProgramCacheForTxBatch,
         sysvar_cache::SysvarCache,
@@ -152,6 +151,8 @@ impl Bank {
                 }
             });
 
+            let feature_set = self.feature_set.runtime_features();
+                        
             let mut dummy_transaction_context = TransactionContext::new(
                 vec![],
                 self.rent_collector.rent.clone(),
@@ -161,12 +162,6 @@ impl Bank {
 
             struct MockCallback {}
             impl InvokeContextCallback for MockCallback {}
-            let feature_set = self.feature_set.runtime_features();
-            let abi_v2_guest_transaction = RuntimeGuestTransaction::new_with_feature_set(
-                &dummy_transaction_context,
-                1,
-                &feature_set,
-            );
             let mut dummy_invoke_context = InvokeContext::new(
                 &mut dummy_transaction_context,
                 &mut program_cache_for_tx_batch,
@@ -180,7 +175,7 @@ impl Bank {
                 None,
                 compute_budget.to_budget(),
                 compute_budget.to_cost(),
-                abi_v2_guest_transaction,
+                None,
             );
 
             let environments = dummy_invoke_context

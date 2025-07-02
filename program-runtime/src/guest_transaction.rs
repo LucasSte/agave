@@ -1,16 +1,18 @@
+#![allow(unused)]
+
+use std::cell::RefCell;
+use std::sync::Arc;
+use solana_sbpf::ebpf::{MM_ACCOUNTS_AREA, MM_RETURN_DATA_AREA, MM_TX_AREA, MM_TX_INSTRUCTION_AREA, MM_TX_INSTRUCTION_DATA_AREA};
+use solana_sbpf::memory_region::MemoryRegion;
 use {
     solana_account::ReadableAccount, solana_pubkey::Pubkey, solana_sbpf::ebpf::MM_REGION_SIZE,
-    solana_svm_feature_set::SVMFeatureSet, solana_transaction_context::TransactionContext,
+    solana_svm_feature_set::SVMFeatureSet,
     std::slice,
 };
-
-/// This is how a slice is represented in the VM.
-/// It should be merged with VmSlice in a future refactor.
-#[repr(C)]
-pub(crate) struct GuestSliceReference {
-    pub(crate) pointer: u64,
-    pub(crate) length: u64,
-}
+use solana_svm_transaction::svm_message::SVMMessage;
+use solana_transaction_context::TransactionAccount;
+use crate::guest_instruction::{create_ix_array, GuestInstruction, GuestInstructionAccount};
+use crate::guest_slice::GuestSliceReference;
 
 /// The Return data scratchpad
 #[repr(C)]
@@ -46,23 +48,22 @@ struct GuestTransactionContext {
 /// `GuestTransactionAccount`. It is the memory region in ABIv2 that contains the transaction
 /// information.
 pub struct RuntimeGuestTransaction {
-    data: Box<[u8]>,
+    tx_raw_metadata: Box<[u8]>,
+    ix_metadata: Vec<GuestInstruction>,
+    ix_accounts: Vec<GuestInstructionAccount>,
+    account_data: Vec<Arc<Vec<u8>>>,
+    payloads: Vec<MemoryRegion>,
 }
 
-// These values should be declared in the sbpf crate
-const RETURN_DATA_SCRATCHPAD_ADDRESS: u64 = MM_REGION_SIZE * 5;
-const ACCOUNT_DATA_VM_ADDRESS: u64 = MM_REGION_SIZE * 8;
-// This value is a fake and will be updated in a future PR
-const CPI_SCRATCHPAD_ADDRESS: u64 = MM_REGION_SIZE * 255;
 
 impl RuntimeGuestTransaction {
     pub fn new_with_feature_set(
-        transaction_context: &TransactionContext,
-        num_instructions: usize,
+        transaction_accounts: &[TransactionAccount],
+        message: &impl SVMMessage,
         feature_set: &SVMFeatureSet,
     ) -> Option<RuntimeGuestTransaction> {
         if feature_set.enable_abi_v2_programs {
-            return Some(Self::new(transaction_context, num_instructions));
+            return Some(Self::new(transaction_accounts, message));
         }
 
         None
@@ -70,11 +71,11 @@ impl RuntimeGuestTransaction {
 
     // TODO: This is supposed to become the new Transaction Context
     pub(crate) fn new(
-        transaction_context: &TransactionContext,
-        num_instructions: usize,
+        transaction_accounts: &[TransactionAccount],
+        message: &impl SVMMessage,
     ) -> RuntimeGuestTransaction {
         let size = size_of::<GuestTransactionContext>().saturating_add(
-            (transaction_context.get_number_of_accounts() as usize)
+            transaction_accounts.len()
                 .saturating_mul(size_of::<GuestTransactionAccount>()),
         );
         let mut memory_vec: Vec<u8> = Vec::with_capacity(size);
@@ -84,28 +85,26 @@ impl RuntimeGuestTransaction {
         let guest_transaction =
             unsafe { &mut *(memory.as_mut_ptr() as *mut GuestTransactionContext) };
 
-        let scratchpad = transaction_context.get_return_data();
-
         guest_transaction.return_data_scratchpad = ReturnDataScratchpad {
-            pubkey: *scratchpad.0,
+            pubkey: Pubkey::new_from_array([0u8; 32]),
             slice: GuestSliceReference {
-                pointer: RETURN_DATA_SCRATCHPAD_ADDRESS,
-                length: scratchpad.1.len() as u64,
+                pointer: MM_RETURN_DATA_AREA,
+                length: 0,
             },
         };
 
         guest_transaction.cpi_scratchpad = GuestSliceReference {
-            pointer: CPI_SCRATCHPAD_ADDRESS,
+            pointer: MM_TX_INSTRUCTION_DATA_AREA + MM_REGION_SIZE * message.num_instructions() as u64,
             length: 0,
         };
 
         guest_transaction.instruction_idx = 0;
-        guest_transaction.instruction_num = num_instructions as u64;
-        guest_transaction.accounts_no = transaction_context.get_number_of_accounts() as u64;
+        guest_transaction.instruction_num = message.num_instructions() as u64;
+        guest_transaction.accounts_no = transaction_accounts.len() as u64;
 
         // SAFETY: The memory region is large enough to contain a GuestTransactionContext and an
         // array of `GuestTransactionAccount`
-        let transaction_accounts = unsafe {
+        let guest_transaction_accounts = unsafe {
             let ptr = memory
                 .as_mut_ptr()
                 .add(size_of::<GuestTransactionContext>());
@@ -115,25 +114,18 @@ impl RuntimeGuestTransaction {
             )
         };
 
-        for index_in_transaction in 0..transaction_context.get_number_of_accounts() {
-            let transaction_account = transaction_context
-                .accounts()
-                .try_borrow(index_in_transaction)
+        for (idx, tx_account) in transaction_accounts.iter().enumerate() {
+            let account_ref = guest_transaction_accounts
+                .get_mut(idx)
                 .unwrap();
-
-            let account_ref = transaction_accounts
-                .get_mut(index_in_transaction as usize)
-                .unwrap();
-            account_ref.pubkey = *transaction_context
-                .get_key_of_account_at_index(index_in_transaction)
-                .unwrap();
-            account_ref.owner = *transaction_account.owner();
-            account_ref.lamports = transaction_account.lamports();
-            let vm_data_addr = ACCOUNT_DATA_VM_ADDRESS
-                .saturating_add(MM_REGION_SIZE.saturating_mul(index_in_transaction as u64));
+            account_ref.pubkey = tx_account.0;
+            account_ref.owner = *tx_account.1.owner();
+            account_ref.lamports = tx_account.1.lamports();
+            let vm_data_addr = MM_ACCOUNTS_AREA
+                .saturating_add(MM_REGION_SIZE.saturating_mul(idx as u64));
             account_ref.data = GuestSliceReference {
                 pointer: vm_data_addr,
-                length: transaction_account.data().len() as u64,
+                length: tx_account.1.data().len() as u64,
             };
         }
 
@@ -141,20 +133,110 @@ impl RuntimeGuestTransaction {
         unsafe {
             memory_vec.set_len(size);
         }
-
+        
+        let payloads = message.instructions_iter().enumerate().map(|(idx, item)|
+            MemoryRegion::new_readonly(
+                item.data,
+                MM_TX_INSTRUCTION_DATA_AREA + MM_REGION_SIZE * idx as u64,
+            )
+        ).collect();
+        
+        let (ix_metadata, ix_accounts) = create_ix_array(message);
         RuntimeGuestTransaction {
-            data: memory_vec.into_boxed_slice(),
+            tx_raw_metadata: memory_vec.into_boxed_slice(),
+            ix_metadata,
+            ix_accounts,
+            account_data: transaction_accounts.iter().map(|item| item.1.data_clone()).collect(),
+            payloads,
         }
     }
-
+    
+    pub fn retrieve_instruction(&self) -> &GuestInstruction {
+        let context = unsafe { &*(self.tx_raw_metadata.as_ptr() as *const GuestTransactionContext) };
+        let ix_idx = context.instruction_idx;
+        &self.ix_metadata[ix_idx as usize]
+    }
+    
+    pub fn prepare_regions(&self) -> Vec<MemoryRegion> {
+        let instr = self.retrieve_instruction();
+        let mut regions: Vec<MemoryRegion> = Vec::with_capacity(
+            3+self.ix_metadata.len()+self.payloads.len() as usize
+        );
+        
+        // TX Area
+        regions.push(
+            MemoryRegion::new_readonly(
+                self.as_slice(),
+                MM_TX_AREA
+            )
+        );
+        
+        // IX Area
+        let ix_metadata_slice = unsafe {
+            let length = self.ix_metadata.len() * size_of::<GuestInstruction>();
+            slice::from_raw_parts(self.ix_metadata.as_ptr() as *const u8, length)
+        };
+        regions.push(
+            MemoryRegion::new_readonly(
+                ix_metadata_slice,
+                MM_TX_INSTRUCTION_AREA
+            )
+        );
+        
+        // IX accounts metadata area
+        let ix_account_slice = unsafe {
+            let length = self.ix_accounts.len() * size_of::<GuestInstructionAccount>();
+            slice::from_raw_parts(self.ix_accounts.as_ptr() as *const u8, length)
+        };
+        regions.push(
+            MemoryRegion::new_readonly(
+                ix_account_slice,
+                MM_TX_INSTRUCTION_DATA_AREA
+            )
+        );
+        
+        // tx accounts payload area
+        let starting_index = ((instr.ix_accounts.pointer - MM_ACCOUNTS_AREA)
+            / size_of::<GuestInstructionAccount>() as u64) as usize;
+        let length = instr.ix_accounts.length as usize;
+        for i in starting_index..(starting_index+length) {
+            let ix_account_metadata = self.ix_accounts.get(i).unwrap();
+            
+            let data = self.account_data.get(ix_account_metadata.tx_acc_idx as usize).unwrap();
+            let addr = MM_ACCOUNTS_AREA + MM_REGION_SIZE * ix_account_metadata.tx_acc_idx as u64;
+            // The writable check isn't as simple as the flag, and this part must be integrated into
+            // TransactionContext.
+            let region = if (ix_account_metadata.flags >> 1) == 1 {
+                // This is a hack and must be removed in the refactor.
+                #[allow(mutable_transmutes)]
+                let slice = unsafe {
+                    std::mem::transmute::<&[u8], &mut [u8]>(data.as_slice())
+                };
+                MemoryRegion::new_writable(
+                    slice,
+                    addr
+                )
+            } else {
+                MemoryRegion::new_readonly(
+                    data.as_slice(),
+                    addr
+                )
+            };
+        }
+        
+        // The payloads region
+        regions.extend(self.payloads.clone());
+        regions
+    }
+    
     pub fn as_slice(&self) -> &[u8] {
-        &self.data
+        &self.tx_raw_metadata
     }
 
     pub fn set_instruction_index(&mut self, index: usize) {
         // SAFETY: We assume the transaction was created using `RuntimeGuestTransaction::new`, which
         // guarantees the safety of size constraints and contents.
-        let context = unsafe { &mut *(self.data.as_mut_ptr() as *mut GuestTransactionContext) };
+        let context = unsafe { &mut *(self.tx_raw_metadata.as_mut_ptr() as *mut GuestTransactionContext) };
 
         context.instruction_idx = index as u64;
     }
@@ -162,19 +244,98 @@ impl RuntimeGuestTransaction {
 
 #[cfg(test)]
 mod test {
+    use solana_hash::Hash;
+    use solana_message::compiled_instruction::CompiledInstruction;
+    use solana_sbpf::ebpf::{MM_ACCOUNTS_AREA, MM_RETURN_DATA_AREA, MM_TX_INSTRUCTION_DATA_AREA};
+    use solana_transaction::sanitized::SanitizedTransaction;
     use {
         crate::guest_transaction::{
             GuestTransactionAccount, GuestTransactionContext, RuntimeGuestTransaction,
-            ACCOUNT_DATA_VM_ADDRESS, CPI_SCRATCHPAD_ADDRESS, RETURN_DATA_SCRATCHPAD_ADDRESS,
         },
         solana_account::{Account, AccountSharedData, ReadableAccount},
-        solana_rent::Rent,
+        solana_pubkey::Pubkey,
         solana_sbpf::ebpf::MM_REGION_SIZE,
         solana_sdk_ids::bpf_loader,
-        solana_transaction_context::TransactionContext,
         std::slice,
     };
+    use solana_svm_transaction::instruction::SVMInstruction;
+    use solana_svm_transaction::message_address_table_lookup::SVMMessageAddressTableLookup;
+    use solana_svm_transaction::svm_message::SVMMessage;
+    use crate::guest_instruction::{create_ix_array, GuestInstructionAccount};
 
+    #[derive(Debug)]
+    struct DummyTx {
+        ix: Vec<CompiledInstruction>,
+    }
+
+    impl SVMMessage for DummyTx {
+        fn num_transaction_signatures(&self) -> u64 {
+            unimplemented!()
+        }
+
+        fn num_write_locks(&self) -> u64 {
+            unimplemented!()
+        }
+
+        fn recent_blockhash(&self) -> &Hash {
+            unimplemented!()
+        }
+
+        fn num_instructions(&self) -> usize {
+            self.ix.len()
+        }
+
+        fn instructions_iter(&self) -> impl Iterator<Item = SVMInstruction> {
+            self.ix.iter().map(SVMInstruction::from)
+        }
+
+        fn program_instructions_iter(
+            &self,
+        ) -> impl Iterator<Item = (&Pubkey, SVMInstruction)> + Clone {
+            unimplemented!();
+            let a = unsafe { std::mem::transmute::<&DummyTx, &SanitizedTransaction>(self) };
+
+            SVMMessage::program_instructions_iter(SanitizedTransaction::message(a))
+        }
+
+        fn static_account_keys(&self) -> &[Pubkey] {
+            unimplemented!()
+        }
+
+        fn account_keys(&self) -> solana_message::AccountKeys {
+            unimplemented!()
+        }
+
+        fn fee_payer(&self) -> &Pubkey {
+            unimplemented!()
+        }
+
+        fn is_writable(&self, index: usize) -> bool {
+            (index % 2) == 1
+        }
+
+        fn is_signer(&self, index: usize) -> bool {
+            (index % 2) == 0
+        }
+
+        fn is_invoked(&self, key_index: usize) -> bool {
+            unimplemented!()
+        }
+
+        fn num_lookup_tables(&self) -> usize {
+            unimplemented!()
+        }
+
+        fn message_address_table_lookups(
+            &self,
+        ) -> impl Iterator<Item = SVMMessageAddressTableLookup> {
+            unimplemented!();
+            let a = unsafe { std::mem::transmute::<&DummyTx, &SanitizedTransaction>(self) };
+
+            SVMMessage::message_address_table_lookups(SanitizedTransaction::message(a))
+        }
+    }
+    
     #[test]
     fn test_creation() {
         let transaction_accounts = vec![
@@ -239,12 +400,30 @@ mod test {
                 }),
             ),
         ];
-        let mut context = TransactionContext::new(transaction_accounts, Rent::default(), 256, 256);
-        let return_data_key = solana_pubkey::new_rand();
-        let data = vec![1u8, 2, 3, 4, 5];
-        context.set_return_data(return_data_key, data).unwrap();
 
-        let mut runtime_transaction = RuntimeGuestTransaction::new(&context, 28);
+        let ix_vec = vec![
+            CompiledInstruction {
+                program_id_index: 2,
+                accounts: vec![1, 2, 3, 4],
+                data: vec![0, 9, 8, 5],
+            },
+            CompiledInstruction {
+                program_id_index: 6,
+                accounts: vec![9, 0],
+                data: vec![0],
+            },
+            CompiledInstruction {
+                program_id_index: 8,
+                accounts: vec![8, 8, 8],
+                data: vec![1, 2, 3],
+            },
+        ];
+
+        let svm_mes = DummyTx { ix: ix_vec };
+
+        let (g_instrs, g_accs) = create_ix_array(&svm_mes);
+
+        let mut runtime_transaction = RuntimeGuestTransaction::new(&transaction_accounts, &svm_mes);
 
         let guest_transaction = unsafe {
             &*(runtime_transaction.as_slice().as_ptr() as *const GuestTransactionContext)
@@ -252,22 +431,22 @@ mod test {
 
         assert_eq!(
             guest_transaction.return_data_scratchpad.pubkey,
-            return_data_key
+            Pubkey::new_from_array([0u8; 32]),
         );
         assert_eq!(
             guest_transaction.return_data_scratchpad.slice.pointer,
-            RETURN_DATA_SCRATCHPAD_ADDRESS
+            MM_RETURN_DATA_AREA
         );
-        assert_eq!(guest_transaction.return_data_scratchpad.slice.length, 5);
+        assert_eq!(guest_transaction.return_data_scratchpad.slice.length, 0);
 
         assert_eq!(
             guest_transaction.cpi_scratchpad.pointer,
-            CPI_SCRATCHPAD_ADDRESS
+            MM_TX_INSTRUCTION_DATA_AREA + MM_REGION_SIZE * svm_mes.num_instructions() as u64,
         );
         assert_eq!(guest_transaction.cpi_scratchpad.length, 0);
 
         assert_eq!(guest_transaction.instruction_idx, 0);
-        assert_eq!(guest_transaction.instruction_num, 28);
+        assert_eq!(guest_transaction.instruction_num, svm_mes.num_instructions() as u64);
         runtime_transaction.set_instruction_index(80);
         assert_eq!(guest_transaction.instruction_idx, 80);
 
@@ -284,19 +463,66 @@ mod test {
             )
         };
 
-        for i in 0..context.get_number_of_accounts() {
-            let guest_account = guest_accounts.get(i as usize).unwrap();
-            let tx_account = context.accounts().try_borrow(i).unwrap();
+        for (idx, tx_account) in transaction_accounts.iter().enumerate() {
+            let guest_account = guest_accounts.get(idx).unwrap();
 
             assert_eq!(
-                *context.get_key_of_account_at_index(i).unwrap(),
+                tx_account.0,
                 guest_account.pubkey
             );
-            assert_eq!(*tx_account.owner(), guest_account.owner);
-            assert_eq!(tx_account.lamports(), guest_account.lamports);
-            let addr = ACCOUNT_DATA_VM_ADDRESS + MM_REGION_SIZE * i as u64;
+            assert_eq!(*tx_account.1.owner(), guest_account.owner);
+            assert_eq!(tx_account.1.lamports(), guest_account.lamports);
+            let addr = MM_ACCOUNTS_AREA + MM_REGION_SIZE * idx as u64;
             assert_eq!(addr, guest_account.data.pointer);
-            assert_eq!(tx_account.data().len() as u64, guest_account.data.length);
+            assert_eq!(tx_account.1.data().len() as u64, guest_account.data.length);
+        }
+    }
+
+    #[test]
+    fn test_ix_area() {
+        let ix_vec = vec![
+            CompiledInstruction {
+                program_id_index: 2,
+                accounts: vec![1, 2, 3, 4],
+                data: vec![0, 9, 8, 5],
+            },
+            CompiledInstruction {
+                program_id_index: 6,
+                accounts: vec![9, 0],
+                data: vec![0],
+            },
+            CompiledInstruction {
+                program_id_index: 8,
+                accounts: vec![8, 8, 8],
+                data: vec![1, 2, 3],
+            },
+        ];
+
+        let svm_mes = DummyTx { ix: ix_vec };
+
+        let (g_instrs, g_accs) = create_ix_array(&svm_mes);
+
+        for (idx, c_instr) in svm_mes.ix.iter().enumerate() {
+            let g_instr = g_instrs.get(idx).unwrap();
+            assert_eq!(c_instr.program_id_index as u64, g_instr.program_id_idx);
+            assert_eq!(0, g_instr.cpi_nesting_level);
+            assert_eq!(u16::MAX, g_instr.parent_ix_idx);
+            assert_eq!(
+                MM_TX_INSTRUCTION_DATA_AREA + idx as u64 * MM_REGION_SIZE,
+                g_instr.ix_data.pointer
+            );
+            assert_eq!(c_instr.data.len() as u64, g_instr.ix_data.length);
+            assert_eq!(c_instr.accounts.len() as u64, g_instr.ix_accounts.length);
+
+            let starting_index = (g_instr.ix_accounts.pointer - MM_ACCOUNTS_AREA)
+                / size_of::<GuestInstructionAccount>() as u64;
+            for i in starting_index..(starting_index + g_instr.ix_accounts.length) {
+                let g_acc = g_accs.get(i as usize).unwrap();
+                let c_acc = *c_instr.accounts.get((i - starting_index) as usize).unwrap();
+                assert_eq!(c_acc as u16, g_acc.tx_acc_idx);
+                assert_eq!(svm_mes.is_writable(c_acc as usize) as u16, g_acc.flags >> 1);
+                assert_eq!(svm_mes.is_signer(c_acc as usize) as u16, g_acc.flags & 0x1);
+            }
         }
     }
 }

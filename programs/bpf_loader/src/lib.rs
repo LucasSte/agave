@@ -5,6 +5,7 @@ pub mod syscalls;
 
 #[cfg(feature = "svm-internal")]
 use qualifier_attr::qualifiers;
+use solana_sbpf::ebpf::MM_TX_INSTRUCTION_AREA;
 use {
     solana_bincode::limited_deserialize,
     solana_clock::Slot,
@@ -265,6 +266,9 @@ fn create_vm<'a, 'b>(
         stack_size,
     );
     vm.registers[1] = MM_TX_AREA;
+    if program.get_sbpf_version() >= SBPFVersion::V4 {
+        vm.registers[2] = MM_TX_INSTRUCTION_AREA;
+    }
     
     Ok(vm)
 }

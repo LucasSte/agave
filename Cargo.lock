@@ -10105,7 +10105,7 @@ checksum = "61f1bc1357b8188d9c4a3af3fc55276e56987265eb7ad073ae6f8180ee54cecf"
 [[package]]
 name = "solana-sbpf"
 version = "0.11.1"
-source = "git+https://github.com/LucasSte/sbpf.git?branch=abiv2-patch#38adbcba4882d9363268c4d3e1628cdd3426c37a"
+source = "git+https://github.com/LucasSte/sbpf.git?branch=abiv2-patch#a6d17ff8e52c8911ee197611f10ac5b13a21cd76"
 dependencies = [
  "byteorder",
  "combine 3.8.1",

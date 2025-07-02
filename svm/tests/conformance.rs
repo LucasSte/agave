@@ -296,6 +296,12 @@ fn execute_fixture_as_instr(
         .map(|key| (*key, mock_bank.get_account_shared_data(key).unwrap()))
         .collect();
 
+    let abi_v2_guest_transaction = RuntimeGuestTransaction::new_with_feature_set(
+        &transaction_accounts,
+        sanitized_message.instructions().len(),
+        &mock_bank.feature_set,
+    );
+    
     let mut transaction_context = TransactionContext::new(
         transaction_accounts,
         rent,
@@ -358,12 +364,8 @@ fn execute_fixture_as_instr(
         &mock_bank.feature_set,
         sysvar_cache,
     );
-
-    let abi_v2_guest_transaction = RuntimeGuestTransaction::new_with_feature_set(
-        &transaction_context,
-        sanitized_message.instructions().len(),
-        &mock_bank.feature_set,
-    );
+    
+    
     let mut invoke_context = InvokeContext::new(
         &mut transaction_context,
         &mut loaded_programs,
