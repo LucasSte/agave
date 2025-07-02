@@ -1619,14 +1619,7 @@ fn execute<'a, 'b: 'a>(
         >= SBPFVersion::V4
         && invoke_context.abi_v2_guest_transaction.is_some()
     {
-        let regions = vec![MemoryRegion::new_readonly(
-            invoke_context
-                .abi_v2_guest_transaction
-                .as_ref()
-                .unwrap()
-                .as_slice(),
-            MM_TX_AREA,
-        )];
+        let regions = invoke_context.abi_v2_guest_transaction.as_ref().unwrap().prepare_regions();
         // The deserialization parameters will be included in a future PR, when we deal with
         // instruction serialization.
         (AlignedMemory::with_capacity_zeroed(0), regions, Vec::new())
