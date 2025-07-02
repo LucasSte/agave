@@ -30,7 +30,7 @@ use {
     solana_sbpf::{
         aligned_memory::AlignedMemory,
         declare_builtin_function,
-        ebpf::{self, MM_HEAP_START, MM_INPUT_START},
+        ebpf::{self, MM_HEAP_START, MM_TX_AREA},
         elf::Executable,
         error::{EbpfError, ProgramResult},
         memory_region::{AccessType, MemoryMapping, MemoryRegion},
@@ -257,13 +257,16 @@ fn create_vm<'a, 'b>(
         accounts_metadata,
         trace_log: Vec::new(),
     })?;
-    Ok(EbpfVm::new(
+    let mut vm = EbpfVm::new(
         program.get_loader().clone(),
         program.get_sbpf_version(),
         invoke_context,
         memory_mapping,
         stack_size,
-    ))
+    );
+    vm.registers[1] = MM_TX_AREA;
+    
+    Ok(vm)
 }
 
 /// Create the SBF virtual machine
@@ -1618,7 +1621,7 @@ fn execute<'a, 'b: 'a>(
                 .as_ref()
                 .unwrap()
                 .as_slice(),
-            MM_INPUT_START,
+            MM_TX_AREA,
         )];
         // The deserialization parameters will be included in a future PR, when we deal with
         // instruction serialization.

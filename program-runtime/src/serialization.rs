@@ -7,7 +7,7 @@ use {
     solana_pubkey::Pubkey,
     solana_sbpf::{
         aligned_memory::{AlignedMemory, Pod},
-        ebpf::{HOST_ALIGN, MM_INPUT_START},
+        ebpf::{HOST_ALIGN, MM_TX_AREA},
         memory_region::MemoryRegion,
     },
     solana_sdk_ids::bpf_loader_deprecated,
@@ -313,7 +313,7 @@ fn serialize_parameters_unaligned(
          + instruction_data.len() // instruction data
          + size_of::<Pubkey>(); // program id
 
-    let mut s = Serializer::new(size, MM_INPUT_START, false, copy_account_data);
+    let mut s = Serializer::new(size, MM_TX_AREA, false, copy_account_data);
 
     let mut accounts_metadata: Vec<SerializedAccountMetadata> = Vec::with_capacity(accounts.len());
     s.write::<u64>((accounts.len() as u64).to_le());
@@ -455,7 +455,7 @@ fn serialize_parameters_aligned(
     + instruction_data.len()
     + size_of::<Pubkey>(); // program id;
 
-    let mut s = Serializer::new(size, MM_INPUT_START, true, copy_account_data);
+    let mut s = Serializer::new(size, MM_TX_AREA, true, copy_account_data);
 
     // Serialize into the buffer
     s.write::<u64>((accounts.len() as u64).to_le());
@@ -1330,7 +1330,7 @@ mod tests {
             let host_slice = unsafe {
                 slice::from_raw_parts(region.host_addr.get() as *const u8, region.len as usize)
             };
-            mem.as_slice_mut()[(region.vm_addr - MM_INPUT_START) as usize..][..region.len as usize]
+            mem.as_slice_mut()[(region.vm_addr - MM_TX_AREA) as usize..][..region.len as usize]
                 .copy_from_slice(host_slice)
         }
         mem

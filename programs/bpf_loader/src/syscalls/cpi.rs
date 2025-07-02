@@ -122,7 +122,7 @@ impl<'a> CallerAccount<'a> {
                 invoke_context.get_check_aligned(),
             )?;
             if direct_mapping {
-                if account_info.lamports.as_ptr() as u64 >= ebpf::MM_INPUT_START {
+                if account_info.lamports.as_ptr() as u64 >= ebpf::MM_TX_AREA {
                     return Err(SyscallError::InvalidPointer.into());
                 }
 
@@ -143,7 +143,7 @@ impl<'a> CallerAccount<'a> {
         )?;
 
         let (serialized_data, vm_data_addr, ref_to_len_in_vm) = {
-            if direct_mapping && account_info.data.as_ptr() as u64 >= ebpf::MM_INPUT_START {
+            if direct_mapping && account_info.data.as_ptr() as u64 >= ebpf::MM_TX_AREA {
                 return Err(SyscallError::InvalidPointer.into());
             }
 
@@ -175,7 +175,7 @@ impl<'a> CallerAccount<'a> {
                 // In the same vein as the other check_account_info_pointer() checks, we don't lock
                 // this pointer to a specific address but we don't want it to be inside accounts, or
                 // callees might be able to write to the pointed memory.
-                if vm_len_addr >= ebpf::MM_INPUT_START {
+                if vm_len_addr >= ebpf::MM_TX_AREA {
                     return Err(SyscallError::InvalidPointer.into());
                 }
             }
@@ -753,7 +753,7 @@ where
     if direct_mapping
         && account_infos_addr
             .saturating_add(account_infos_len.saturating_mul(std::mem::size_of::<T>() as u64))
-            >= ebpf::MM_INPUT_START
+            >= ebpf::MM_TX_AREA
     {
         return Err(SyscallError::InvalidPointer.into());
     }
@@ -1579,7 +1579,7 @@ mod tests {
             invoke_context::SerializedAccountMetadata, with_mock_invoke_context_with_feature_set,
         },
         solana_sbpf::{
-            ebpf::MM_INPUT_START, memory_region::MemoryRegion, program::SBPFVersion, vm::Config,
+            ebpf::MM_TX_AREA, memory_region::MemoryRegion, program::SBPFVersion, vm::Config,
         },
         solana_sdk_ids::system_program,
         solana_transaction_context::TransactionAccount,
@@ -1667,7 +1667,7 @@ mod tests {
             is_writable: false,
         }];
         let data = b"ins data".to_vec();
-        let vm_addr = MM_INPUT_START;
+        let vm_addr = MM_TX_AREA;
         let (_mem, region) = MockInstruction {
             program_id,
             accounts: accounts.clone(),
@@ -1708,7 +1708,7 @@ mod tests {
         let program_id = Pubkey::new_unique();
         let (derived_key, bump_seed) = Pubkey::find_program_address(&[b"foo"], &program_id);
 
-        let vm_addr = MM_INPUT_START;
+        let vm_addr = MM_TX_AREA;
         let (_mem, region) = mock_signers(&[b"foo", &[bump_seed]], vm_addr);
 
         let config = Config {
@@ -1743,7 +1743,7 @@ mod tests {
         );
 
         let key = Pubkey::new_unique();
-        let vm_addr = MM_INPUT_START;
+        let vm_addr = MM_TX_AREA;
         let (_mem, region, account_metadata) =
             MockAccountInfo::new(key, &account).into_region(vm_addr);
 
@@ -2514,7 +2514,7 @@ mod tests {
         let key = transaction_accounts[1].0;
         let original_data_len = account.data().len();
 
-        let vm_addr = MM_INPUT_START;
+        let vm_addr = MM_TX_AREA;
         let (_mem, region, account_metadata) =
             MockAccountInfo::new(key, &account).into_region(vm_addr);
 

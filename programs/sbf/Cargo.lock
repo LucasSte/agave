@@ -7352,6 +7352,7 @@ dependencies = [
  "solana-stable-layout",
  "solana-svm-callback",
  "solana-svm-feature-set",
+ "solana-svm-transaction",
  "solana-system-interface",
  "solana-sysvar",
  "solana-sysvar-id",
@@ -8675,7 +8676,7 @@ dependencies = [
 [[package]]
 name = "solana-sbpf"
 version = "0.11.1"
-source = "git+https://github.com/anza-xyz/sbpf.git?rev=967c2a2eba03816ee14f4c6338476690d374f511#967c2a2eba03816ee14f4c6338476690d374f511"
+source = "git+https://github.com/LucasSte/sbpf.git?branch=abiv2-patch#38adbcba4882d9363268c4d3e1628cdd3426c37a"
 dependencies = [
  "byteorder 1.5.0",
  "combine 3.8.1",
