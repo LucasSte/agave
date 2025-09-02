@@ -1533,6 +1533,7 @@ fn execute<'a, 'b: 'a>(
         if !return_data.is_empty() {
             stable_log::program_return(&log_collector, &program_id, return_data);
         }
+        //std::println!("\n\nRes: {:?}", result);
         match result {
             ProgramResult::Ok(status) if status != SUCCESS => {
                 let error: InstructionError = status.into();
