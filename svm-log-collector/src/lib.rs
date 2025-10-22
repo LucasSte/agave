@@ -38,15 +38,15 @@ impl LogCollector {
         };
 
         let bytes_written = self.bytes_written.saturating_add(message.len());
-        if bytes_written >= limit {
-            if !self.limit_warning {
-                self.limit_warning = true;
-                self.messages.push(String::from("Log truncated"));
-            }
-        } else {
+        // if bytes_written >= limit {
+        //     if !self.limit_warning {
+        //         self.limit_warning = true;
+        //         self.messages.push(String::from("Log truncated"));
+        //     }
+        // } else {
             self.bytes_written = bytes_written;
             self.messages.push(message.to_string());
-        }
+        //}
     }
 
     pub fn get_recorded_content(&self) -> &[String] {
