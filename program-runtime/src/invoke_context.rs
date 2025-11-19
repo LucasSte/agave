@@ -1516,6 +1516,138 @@ mod tests {
     }
 
     #[test]
+    fn test_prepare_instruction_too_many_accounts() {
+        let mut transaction_accounts: Vec<KeyedAccountSharedData> =
+            Vec::with_capacity(MAX_ACCOUNTS_PER_TRANSACTION);
+        let mut account_metas: Vec<AccountMeta> = Vec::with_capacity(300);
+
+        // Fee-payer
+        let fee_payer = Keypair::new();
+        transaction_accounts.push((
+            fee_payer.pubkey(),
+            AccountSharedData::new(1, 1, &Pubkey::new_unique()),
+        ));
+        account_metas.push(AccountMeta::new(fee_payer.pubkey(), true));
+
+        let program_id = Pubkey::new_unique();
+        let mut program_account = AccountSharedData::new(1, 1, &Pubkey::new_unique());
+        program_account.set_executable(true);
+        transaction_accounts.push((program_id, program_account));
+        account_metas.push(AccountMeta::new_readonly(program_id, false));
+
+        for i in 2..300 {
+            if i < MAX_ACCOUNTS_PER_TRANSACTION {
+                let key = Pubkey::new_unique();
+                transaction_accounts.push((key, AccountSharedData::new(1, 1, &Pubkey::new_unique())));
+                account_metas.push(AccountMeta::new_readonly(key, false));
+            } else {
+                let repeated_key = transaction_accounts.get(i % MAX_ACCOUNTS_PER_TRANSACTION).unwrap().0;
+                account_metas.push(AccountMeta::new_readonly(key, false));
+            }
+        }
+
+        with_mock_invoke_context!(invoke_context, transaction_context, transaction_accounts);
+
+        let instruction_1 = Instruction::new_with_bytes(program_id, &[20], account_metas.clone());
+
+        let instruction_2 = Instruction::new_with_bytes(
+            program_id,
+            &[20],
+            account_metas.iter().rev().cloned().collect(),
+        );
+
+        let transaction = Transaction::new_with_payer(
+            &[instruction_1.clone(), instruction_2.clone()],
+            Some(&fee_payer.pubkey()),
+        );
+
+        let sanitized =
+            SanitizedTransaction::try_from_legacy_transaction(transaction, &HashSet::new())
+                .unwrap();
+
+        fn test_case_1(invoke_context: &InvokeContext) {
+            let instruction_context = invoke_context
+                .transaction_context
+                .get_next_instruction_context()
+                .unwrap();
+            for index_in_instruction in 0..300 as IndexOfAccount {
+
+            }
+            for index_in_transaction in 0..MAX_ACCOUNTS_PER_INSTRUCTION as IndexOfAccount {
+                let index_in_instruction = instruction_context
+                    .get_index_of_account_in_instruction(index_in_transaction as IndexOfAccount)
+                    .unwrap();
+                let other_transaction = instruction_context
+                    .get_index_of_instruction_account_in_transaction(index_in_instruction)
+                    .unwrap();
+                assert_eq!(index_in_transaction, other_transaction);
+                assert_eq!(index_in_transaction, index_in_instruction);
+            }
+        }
+
+        fn test_case_2(invoke_context: &InvokeContext) {
+            let instruction_context = invoke_context
+                .transaction_context
+                .get_next_instruction_context()
+                .unwrap();
+            for index_in_transaction in 0..MAX_ACCOUNTS_PER_INSTRUCTION as IndexOfAccount {
+                let index_in_instruction = instruction_context
+                    .get_index_of_account_in_instruction(index_in_transaction as IndexOfAccount)
+                    .unwrap();
+                let other_transaction = instruction_context
+                    .get_index_of_instruction_account_in_transaction(index_in_instruction)
+                    .unwrap();
+                assert_eq!(
+                    index_in_instruction,
+                    (MAX_ACCOUNTS_PER_INSTRUCTION as IndexOfAccount)
+                        .saturating_sub(index_in_transaction)
+                        .saturating_sub(1)
+                );
+                assert_eq!(index_in_transaction, other_transaction);
+            }
+        }
+
+        let svm_instruction =
+            SVMInstruction::from(sanitized.message().instructions().first().unwrap());
+        invoke_context
+            .prepare_next_top_level_instruction(
+                &sanitized,
+                &svm_instruction,
+                90,
+                svm_instruction.data,
+            )
+            .unwrap();
+
+        test_case_1(&invoke_context);
+
+        invoke_context.transaction_context.push().unwrap();
+        let svm_instruction =
+            SVMInstruction::from(sanitized.message().instructions().get(1).unwrap());
+        invoke_context
+            .prepare_next_top_level_instruction(
+                &sanitized,
+                &svm_instruction,
+                90,
+                svm_instruction.data,
+            )
+            .unwrap();
+
+        test_case_2(&invoke_context);
+
+        invoke_context.transaction_context.push().unwrap();
+        invoke_context
+            .prepare_next_instruction(instruction_1, &[fee_payer.pubkey()])
+            .unwrap();
+        test_case_1(&invoke_context);
+
+        invoke_context.transaction_context.push().unwrap();
+        invoke_context
+            .prepare_next_instruction(instruction_2, &[fee_payer.pubkey()])
+            .unwrap();
+        test_case_2(&invoke_context);
+    }
+
+    #[test]
     fn test_duplicated_accounts() {
         let mut transaction_accounts: Vec<KeyedAccountSharedData> =
             Vec::with_capacity(MAX_ACCOUNTS_PER_TRANSACTION);
