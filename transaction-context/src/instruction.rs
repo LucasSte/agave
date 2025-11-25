@@ -51,6 +51,7 @@ impl InstructionFrame {
 
     /// This function retrieves the range to index transaction_context.deduplication_maps
     pub fn deduplication_map_range(instruction_index: usize) -> Range<usize> {
+        // We reference transaction accounts by an u8 index, so we have a total of 256 accounts.
         instruction_index.saturating_mul(MAX_ACCOUNTS_PER_TRANSACTION)
             ..instruction_index
                 .saturating_add(1)
@@ -150,6 +151,7 @@ impl<'a> InstructionContext<'a, '_> {
         &self,
         instruction_account_index: IndexOfAccount,
     ) -> Result<IndexOfAccount, InstructionError> {
+        std::println!("idx: {}, len: {}", instruction_account_index, self.instruction_accounts.len());
         Ok(self
             .instruction_accounts
             .get(instruction_account_index as usize)
@@ -162,9 +164,11 @@ impl<'a> InstructionContext<'a, '_> {
         &self,
         index_in_transaction: IndexOfAccount,
     ) -> Result<IndexOfAccount, InstructionError> {
+        std::println!("dedup len: {}, idx: {}", self.dedup_map.len(), index_in_transaction);
         self.dedup_map
             .get(index_in_transaction as usize)
             .and_then(|idx| {
+                std::println!("Retrieved: {}", idx);
                 if *idx as usize >= self.instruction_accounts.len() {
                     None
                 } else {

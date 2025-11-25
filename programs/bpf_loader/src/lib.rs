@@ -896,6 +896,7 @@ fn process_loader_upgradeable_instruction(
                 .get_feature_set()
                 .enable_bpf_loader_set_authority_checked_ix
             {
+                std::println!("Case2");
                 return Err(InstructionError::InvalidInstructionData);
             }
 
@@ -1066,6 +1067,7 @@ fn process_loader_upgradeable_instruction(
                     log_collector,
                     "ExtendProgram was superseded by ExtendProgramChecked"
                 );
+                std::println!("Case3");
                 return Err(InstructionError::InvalidInstructionData);
             }
             common_extend_program(invoke_context, additional_bytes, false)?;
@@ -1075,12 +1077,14 @@ fn process_loader_upgradeable_instruction(
                 .get_feature_set()
                 .enable_extend_program_checked
             {
+                std::println!("Case4");
                 return Err(InstructionError::InvalidInstructionData);
             }
             common_extend_program(invoke_context, additional_bytes, true)?;
         }
         UpgradeableLoaderInstruction::Migrate => {
             if !invoke_context.get_feature_set().enable_loader_v4 {
+                std::println!("Case5");
                 return Err(InstructionError::InvalidInstructionData);
             }
 
@@ -1260,6 +1264,7 @@ fn common_extend_program(
     let optional_payer_account_index = if check_authority { 4 } else { 3 };
 
     if additional_bytes == 0 {
+        std::println!("Case1");
         ic_logger_msg!(log_collector, "Additional bytes must be greater than 0");
         return Err(InstructionError::InvalidInstructionData);
     }

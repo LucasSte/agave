@@ -108,6 +108,7 @@ impl ComputeBudgetInstructionDetails {
                 if Self::sanitize_requested_heap_size(requested_heap_size) {
                     requested_heap_size
                 } else {
+                    std::println!("budget1");
                     return Err(TransactionError::InstructionError(
                         index,
                         InstructionError::InvalidInstructionData,
@@ -153,6 +154,7 @@ impl ComputeBudgetInstructionDetails {
     }
 
     fn process_instruction(&mut self, index: u8, instruction: &SVMInstruction) -> Result<()> {
+        std::println!("Budget2");
         let invalid_instruction_data_error =
             TransactionError::InstructionError(index, InstructionError::InvalidInstructionData);
         let duplicate_instruction_error = TransactionError::DuplicateInstruction(index);
