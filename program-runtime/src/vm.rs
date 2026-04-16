@@ -7,7 +7,7 @@ use {
         execution_budget::MAX_INSTRUCTION_STACK_DEPTH_SIMD_0268,
         invoke_context::{BpfAllocator, InvokeContext},
         mem_pool::VmMemoryPool,
-        memory_context::{MemoryContext, SerializedAccountMetadata},
+        memory_context::{MemoryContext, SerializedAccountMetadata, create_abiv2_regions},
         program_cache_entry::ProgramCacheEntry,
         serialization::{self, SerializationResult},
         stable_log,
@@ -15,10 +15,12 @@ use {
     solana_instruction_error::InstructionError,
     solana_program_entrypoint::{MAX_PERMITTED_DATA_INCREASE, SUCCESS},
     solana_sbpf::{
+        aligned_memory::AlignedMemory,
         ebpf::{self, MM_HEAP_START, MM_RODATA_START, MM_STACK_START},
         elf::Executable,
         error::{EbpfError, ProgramResult},
         memory_region::{AccessType, MemoryMapping, MemoryRegion},
+        program::SBPFVersion,
         vm::{ContextObject, EbpfVm, ExecutionMode},
     },
     solana_sdk_ids::bpf_loader_deprecated,
@@ -84,11 +86,23 @@ unsafe fn configure_program_regions<C: ContextObject>(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mapping = invoke_context.memory_contexts.memory_mapping_mut()?;
     let regions = mapping.get_regions_mut();
-    let [ro_area, stack_area, heap_area, ..] = regions else {
-        panic!("the regions vector must have at least three entries")
-    };
-    *ro_area = executable.get_ro_region();
     let sbpf_version = executable.get_sbpf_version();
+
+    let (ro_area, stack_area, heap_area) = if sbpf_version >= SBPFVersion::V4 {
+        let [ro_area, _text_area, stack_area, heap_area] = regions else {
+            panic!("the regions vector must have at least four entries")
+        };
+
+        (ro_area, stack_area, heap_area)
+    } else {
+        let [ro_area, stack_area, heap_area, ..] = regions else {
+            panic!("the regions vector must have at least three entries")
+        };
+
+        (ro_area, stack_area, heap_area)
+    };
+
+    *ro_area = executable.get_ro_region();
     let config = executable.get_config();
     *stack_area = MemoryRegion::new_gapped(
         stack,
@@ -100,6 +114,7 @@ unsafe fn configure_program_regions<C: ContextObject>(
         },
     );
     *heap_area = MemoryRegion::new(heap, MM_HEAP_START);
+    // TODO: How about only performing a check for ABIv2 instead of modifying it?
     mapping
         .initialize()
         .map_err(|err| Box::new(err) as Box<dyn std::error::Error>)
@@ -181,6 +196,11 @@ unsafe fn set_memory_context<'b>(
         .map_err(|err| Box::new(err) as Box<dyn std::error::Error>)
 }
 
+struct ABIv1Parameters {
+    serialization_result: SerializationResult,
+    serialize_time: Measure,
+}
+
 #[cfg_attr(feature = "svm-internal", qualifiers(pub))]
 pub fn execute<'a, 'b: 'a>(
     executable: &'a Executable<InvokeContext<'static, 'static>>,
@@ -208,44 +228,56 @@ pub fn execute<'a, 'b: 'a>(
     let direct_account_pointers_in_program_input = invoke_context
         .get_feature_set()
         .direct_account_pointers_in_program_input;
-    let pass_input_metadata_in_vm_r3_r5 = invoke_context
-        .get_feature_set()
+    let pass_input_metadata_in_vm_r3_r5 = invoke_context.get_feature_set()
         .pass_input_metadata_in_vm_r3_r5;
 
-    let mut serialize_time = Measure::start("serialize");
-    let SerializationResult {
-        parameter_bytes,
-        regions,
-        accounts_metadata,
-        instruction_data_offset,
-        account_pointers_offset,
-    } = serialization::serialize_parameters(
-        &instruction_context,
-        virtual_address_space_adjustments,
-        account_data_direct_mapping,
-        direct_account_pointers_in_program_input,
-    )?;
-    serialize_time.stop();
+    let is_abi_v2 = executable.get_sbpf_version() == SBPFVersion::V4;
+
+    let mut abiv1_parameters = if is_abi_v2 {
+        initialize_abi_v2_areas(invoke_context, executable);
+        None
+    } else {
+        let mut serialize_time = Measure::start("serialize");
+        let serialization_result =
+            serialization::serialize_parameters(
+                &instruction_context,
+                virtual_address_space_adjustments,
+                account_data_direct_mapping,
+                direct_account_pointers_in_program_input,
+            )?;
+        serialize_time.stop();
+
+        Some(ABIv1Parameters {
+            serialization_result,
+            serialize_time,
+        })
+    };
 
     let instruction_data_len = instruction_context.get_instruction_data().len();
     let number_of_instruction_accounts = instruction_context.get_number_of_instruction_accounts();
 
     // save the account addresses so in case we hit an AccessViolation error we
     // can map to a more specific error
-    let account_region_addrs = accounts_metadata
-        .iter()
-        .map(|m| {
-            let vm_end = m
-                .vm_data_addr
-                .saturating_add(m.original_data_len as u64)
-                .saturating_add(if !is_loader_deprecated {
-                    MAX_PERMITTED_DATA_INCREASE as u64
-                } else {
-                    0
-                });
-            m.vm_data_addr..vm_end
+    let account_region_addrs = abiv1_parameters
+        .as_ref()
+        .map(|params| {
+            params.serialization_result
+                .accounts_metadata
+                .iter()
+                .map(|m| {
+                    let vm_end = m
+                        .vm_data_addr
+                        .saturating_add(m.original_data_len as u64)
+                        .saturating_add(if !is_loader_deprecated {
+                            MAX_PERMITTED_DATA_INCREASE as u64
+                        } else {
+                            0
+                        });
+                    m.vm_data_addr..vm_end
+                })
+                .collect::<Vec<_>>()
         })
-        .collect::<Vec<_>>();
+        .unwrap_or_default();
 
     #[cfg(feature = "sbpf-debugger")]
     let (debug_port, debug_metadata) = if invoke_context.debug_port.is_some() {
@@ -277,15 +309,17 @@ pub fn execute<'a, 'b: 'a>(
         // SAFETY: The memory pointed to by regions is valid for the useful lifetime of
         // `invoke_context`, which in turn contains the `MemoryMapping` that allows access to this
         // memory.
-        set_memory_context(
-            regions,
-            accounts_metadata,
-            invoke_context,
-            executable,
-            virtual_address_space_adjustments,
-            account_data_direct_mapping,
-        )?
-    };
+        if let Some(v1_params) = &mut abiv1_parameters {
+            set_memory_context(
+                std::mem::take(&mut v1_params.serialization_result.regions),
+                std::mem::take(&mut v1_params.serialization_result.accounts_metadata),
+                invoke_context,
+                executable,
+                virtual_address_space_adjustments,
+                account_data_direct_mapping,
+            )?;
+        }
+    }
 
     let execution_result = {
         let mut execution_mode = ExecutionMode::PreferJit;
@@ -320,26 +354,28 @@ pub fn execute<'a, 'b: 'a>(
         let execute_time = Measure::start("execute");
         let prev_nested_exec_time = vm.context().total_nested_exec_time;
 
-        vm.registers[1] = ebpf::MM_INPUT_START;
-        vm.registers[2] = instruction_data_offset as u64;
+        if let Some(v1_params) = &abiv1_parameters {
+            vm.registers[1] = ebpf::MM_INPUT_START;
+            vm.registers[2] = v1_params.serialization_result.instruction_data_offset as u64;
 
-        // SIMD-0683: Pass ABIv1 input metadata via registers r3–r5.
-        if !is_loader_deprecated && pass_input_metadata_in_vm_r3_r5 {
-            vm.registers[3] = instruction_data_len as u64;
-            vm.registers[4] = if let Some(account_pointers_offset) = account_pointers_offset {
-                account_pointers_offset as u64
-            } else {
-                // SIMD-0683 depends on SIMD-0449, which provides the account
-                // pointers array. Since this path only handles ABIv1, the offset
-                // should always be present when SIMD-0683 is enabled so this error
-                // should never happen.
-                ic_logger_msg!(
+            // SIMD-0683: Pass ABIv1 input metadata via registers r3–r5.
+            if !is_loader_deprecated && pass_input_metadata_in_vm_r3_r5 {
+                vm.registers[3] = instruction_data_len as u64;
+                vm.registers[4] = if let Some(account_pointers_offset) = v1_params.serialization_result.account_pointers_offset {
+                    account_pointers_offset as u64
+                } else {
+                    // SIMD-0683 depends on SIMD-0449, which provides the account
+                    // pointers array. Since this path only handles ABIv1, the offset
+                    // should always be present when SIMD-0683 is enabled so this error
+                    // should never happen.
+                    ic_logger_msg!(
                     log_collector,
                     "Failed to create SBF VM: cannot determine account pointers offset"
                 );
-                return Err(Box::new(InstructionError::ProgramEnvironmentSetupFailure));
-            };
-            vm.registers[5] = number_of_instruction_accounts as u64;
+                    return Err(Box::new(InstructionError::ProgramEnvironmentSetupFailure));
+                };
+                vm.registers[5] = number_of_instruction_accounts as u64;
+            }
         }
 
         let mut call_frames =
@@ -507,20 +543,41 @@ pub fn execute<'a, 'b: 'a>(
 
     let mut deserialize_time = Measure::start("deserialize");
     let execute_or_deserialize_result = execution_result.and_then(|_| {
-        deserialize_parameters(
-            invoke_context,
-            parameter_bytes.as_slice(),
-            virtual_address_space_adjustments,
-            account_data_direct_mapping,
-        )
-        .map_err(|error| Box::new(error) as Box<dyn std::error::Error>)
+        if let Some(v1_params) = &abiv1_parameters {
+            deserialize_parameters(
+                invoke_context,
+                v1_params.serialization_result.parameter_bytes.as_slice(),
+                virtual_address_space_adjustments,
+                account_data_direct_mapping,
+            )
+            .map_err(|error| Box::new(error) as Box<dyn std::error::Error>)
+        } else {
+            Ok(())
+        }
     });
     deserialize_time.stop();
 
     // Update the timings
-    invoke_context.timings.serialize_us += serialize_time.as_us();
+    if let Some(v1_params) = &abiv1_parameters {
+        invoke_context.timings.serialize_us += v1_params.serialize_time.as_us();
+        invoke_context.timings.deserialize_us += deserialize_time.as_us();
+    }
     invoke_context.timings.create_vm_us += create_vm_time.as_us();
-    invoke_context.timings.deserialize_us += deserialize_time.as_us();
 
     execute_or_deserialize_result
+}
+
+fn initialize_abi_v2_areas<C: ContextObject>(
+    invoke_context: &mut InvokeContext,
+    executable: &Executable<C>,
+) {
+    // Doing a lazy initialization in case we don't have any ABIv2 instruction in the transaction.
+    if invoke_context.memory_contexts.abi_v2_regions_exist() {
+        return;
+    }
+
+    let abi_v2_regions = create_abiv2_regions(invoke_context.transaction_context);
+    invoke_context
+        .memory_contexts
+        .create_abi_v2_mappings(abi_v2_regions, executable);
 }
