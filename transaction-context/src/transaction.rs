@@ -613,8 +613,12 @@ impl<'ix_data> TransactionContext<'ix_data> {
         &raw const self.instruction_trace[..]
     }
 
-    pub fn return_data_as_raw_slice(&self) -> *const [u8] {
-        &raw const self.return_data_bytes[..]
+    pub fn return_data_buffer(&self) -> &Vec<u8> {
+        &self.return_data_bytes
+    }
+
+    pub fn return_data_buffer_mut(&mut self) -> &mut Vec<u8> {
+        &mut self.return_data_bytes
     }
 
     pub fn instruction_payload_regions(&self, regions: &mut [MemoryRegion]) {

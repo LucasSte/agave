@@ -1,4 +1,9 @@
 #![cfg(feature = "agave-unstable-api")]
+use solana_sbpf::memory_region::MemoryRegion;
+use solana_transaction_context::vm_addresses::{
+    GUEST_ACCOUNT_PAYLOAD_BASE_ADDRESS, GUEST_INSTRUCTION_DATA_BASE_ADDRESS, MAXIMUM_VALID_ADDRESS, RETURN_DATA_SCRATCHPAD, abiv2_region_index_from_vm_address
+};
+
 pub use self::{
     cpi::{SyscallInvokeSignedC, SyscallInvokeSignedRust},
     logging::{
@@ -2716,6 +2721,93 @@ declare_builtin_function!(
 
             Ok(invoke_context.get_epoch_stake_for_vote_account(vote_address))
         }
+    }
+);
+
+declare_builtin_function!(
+    /// Assign a new owner (as specified via `arg2: &[u8; 32]`) to the account specified in `arg1`.
+    SyscallAssignOwner,
+    fn rust(
+        invoke_context: &mut InvokeContext<'_, '_>,
+        account_index: u64,
+        new_owner_addr: u64,
+        _arg3: u64,
+        _arg4: u64,
+        _arg5: u64,
+    ) -> Result<u64, Error> {
+        todo!()
+    }
+);
+
+declare_builtin_function!(
+    /// Transfer `amount` lamports from account at `credit` to account at `debit`.
+    SyscallTransferLamports,
+    fn rust(
+        _invoke_context: &mut InvokeContext<'_, '_>,
+        credit_account_index: u64,
+        debit_account_index: u64,
+        amount: u64,
+        _arg4: u64,
+        _arg5: u64,
+    ) -> Result<u64, Error> {
+        todo!()
+    }
+);
+
+declare_builtin_function!(
+    /// Resize the specified buffer to a new size.
+    SyscallSetBufferLength,
+    fn rust(
+        invoke_context: &mut InvokeContext<'_, '_>,
+        region_base_address: u64,
+        new_length: u64,
+        _arg3: u64,
+        _arg4: u64,
+        _arg5: u64,
+    ) -> Result<u64, Error> {
+        let memory_mapping = invoke_context.memory_contexts.memory_mapping()?;
+        let Some((idx, region)) = memory_mapping.find_region(region_base_address) else {
+            return Err(SyscallError::InvalidPointer.into());
+        };
+        if region.vm_addr != region_base_address || !region.writable {
+            return Err(SyscallError::InvalidPointer.into());
+        }
+        if let Some(increase_bytes) = new_length.checked_sub(region.len) {
+            todo!("charge bytes for memset(0). Should we always charge for the entire new_length \
+                   to also account for realloc that possibly involves a memmove??");
+        }
+
+        let new_region = match region_base_address {
+            RETURN_DATA_SCRATCHPAD => {
+                let buffer = invoke_context.transaction_context.return_data_buffer_mut();
+                buffer.resize(new_length as usize, 0);
+                // FIXME(nagisa): RISKY! The above might have realloc'd, but replace_region can
+                // still fail, leaving the memory mapping in an entirely invalid and unsound state
+                // if used afterwards!
+                //
+                // To consider: removing the old mapping first before modifications so that code
+                // perturbations aren't problematic. At that point, although its a non-atomic 2 step
+                // operation, early exits out of this function aren't an unsoundness risk at least.
+                MemoryRegion::new(&raw mut buffer[..], region.vm_addr)
+            },
+            GUEST_ACCOUNT_PAYLOAD_BASE_ADDRESS..GUEST_INSTRUCTION_DATA_BASE_ADDRESS => {
+                todo!()
+            }
+            GUEST_INSTRUCTION_DATA_BASE_ADDRESS..GUEST_INSTRUCTION_DATA_BASE_ADDRESS => {
+                todo!()
+            }
+            GUEST_INSTRUCTION_DATA_BASE_ADDRESS..MAXIMUM_VALID_ADDRESS => {
+                todo!()
+            }
+
+            // Unknown or non-resizable region, even if mapped as writable?
+            // FIXME(?): this is a compatibility hazard.
+            _ => return Err(SyscallError::InvalidPointer.into());
+        };
+        unsafe {
+            memory_mapping.replace_region(idx, new_region)?;
+        }
+        Ok(0)
     }
 );
 

@@ -256,7 +256,7 @@ pub(crate) fn create_abiv2_regions(transaction_context: &TransactionContext) -> 
         .unwrap() = MemoryRegion::new(instruction_trace_slice, INSTRUCTION_TRACE_AREA);
 
     // Index 7: Return data scratchpad area
-    let return_data_slice = transaction_context.return_data_as_raw_slice();
+    let return_data_slice = &raw const transaction_context.return_data_buffer()[..];
     *v2_regions
         .get_mut(abiv2_region_index_from_vm_address(RETURN_DATA_SCRATCHPAD))
         .unwrap() = MemoryRegion::new(return_data_slice, RETURN_DATA_SCRATCHPAD);
