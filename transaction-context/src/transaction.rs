@@ -8,6 +8,7 @@ use {
         transaction_accounts::{KeyedAccountSharedData, TransactionAccounts},
         vm_addresses::{
             GUEST_INSTRUCTION_DATA_BASE_ADDRESS, GUEST_REGION_SIZE, RETURN_DATA_SCRATCHPAD,
+            abiv2_region_index_from_vm_address,
         },
     },
     solana_account::{AccountSharedData, ReadableAccount, WritableAccount},
@@ -632,6 +633,23 @@ impl<'ix_data> TransactionContext<'ix_data> {
         }
 
         self.fill_missing_instruction_regions(regions, GUEST_INSTRUCTION_DATA_BASE_ADDRESS);
+    }
+
+    pub fn abiv2_resize_instruction_payload_region(
+        &mut self,
+        address: u64,
+        new_len: u64,
+    ) -> Result<MemoryRegion, InstructionError> {
+        let ix_address = address
+            .checked_sub(GUEST_INSTRUCTION_DATA_BASE_ADDRESS)
+            .ok_or(InstructionError::InvalidArgument)?;
+        let ix_idx = abiv2_region_index_from_vm_address(ix_address);
+        let ix = self
+            .instruction_data
+            .get_mut(ix_idx)
+            .ok_or(InstructionError::InvalidArgument)?;
+        ix.to_mut().resize(new_len as usize, 0);
+        Ok(MemoryRegion::new(&raw mut ix.to_mut()[..], address))
     }
 
     pub fn instruction_accounts_regions(&self, regions: &mut [MemoryRegion]) {

@@ -1,6 +1,9 @@
+#[cfg(not(any(target_arch = "bpf", target_arch = "sbf")))]
+use crate::vm_addresses::abiv2_region_index_from_vm_address;
 #[cfg(feature = "dev-context-only-utils")]
 use qualifier_attr::qualifiers;
-use {crate::vm_slice::VmSlice, solana_pubkey::Pubkey};
+
+use {crate::vm_slice::VmSlice, solana_pubkey::Pubkey, solana_sbpf::memory_region::VmExposable};
 #[cfg(not(any(target_arch = "bpf", target_arch = "sbf")))]
 use {
     crate::{
@@ -527,6 +530,38 @@ impl TransactionAccounts {
                 GUEST_REGION_SIZE.saturating_mul(accounts_no.saturating_add(idx) as u64),
             )
         }
+    }
+
+    pub fn abiv2_resize_account_payload_buffer(
+        &mut self,
+        address: u64,
+        new_len: u64,
+    ) -> Result<MemoryRegion, InstructionError> {
+        if new_len > MAX_ACCOUNT_DATA_LEN {
+            return Err(InstructionError::InvalidRealloc);
+        }
+        let account_address = address
+            .checked_sub(GUEST_ACCOUNT_PAYLOAD_BASE_ADDRESS)
+            .ok_or(InstructionError::InvalidArgument)?;
+        let account_index = abiv2_region_index_from_vm_address(account_address);
+        let account = self
+            .private_account_fields
+            .get_mut(account_index)
+            .ok_or(InstructionError::InvalidArgument)?;
+        // FIXME(nagisa): this is potentially cloning possibly leading to divergence in both size
+        // and contents with other reference holders.
+        let payload = Arc::make_mut(&mut account.get_mut().payload);
+        payload.resize(new_len as usize, 0);
+        let shared_fields = self
+            .shared_account_fields
+            .get_mut(account_index)
+            .ok_or(InstructionError::InvalidArgument)?;
+        unsafe {
+            // FIXME(nagisa): um, the doc-comment for shared fields says to not modify them, but if
+            // we don't then the value seen by the guest becomes incorrect??
+            shared_fields.get_mut().payload.set_len(new_len);
+        }
+        Ok(MemoryRegion::new(&raw mut payload[..], address))
     }
 }
 

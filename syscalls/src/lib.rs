@@ -1,7 +1,9 @@
 #![cfg(feature = "agave-unstable-api")]
 use solana_sbpf::memory_region::MemoryRegion;
 use solana_transaction_context::vm_addresses::{
-    GUEST_ACCOUNT_PAYLOAD_BASE_ADDRESS, GUEST_INSTRUCTION_DATA_BASE_ADDRESS, MAXIMUM_VALID_ADDRESS, RETURN_DATA_SCRATCHPAD, abiv2_region_index_from_vm_address
+    GUEST_ACCOUNT_PAYLOAD_BASE_ADDRESS, GUEST_INSTRUCTION_ACCOUNT_BASE_ADDRESS,
+    GUEST_INSTRUCTION_DATA_BASE_ADDRESS, MAXIMUM_VALID_ADDRESS, RETURN_DATA_SCRATCHPAD,
+    abiv2_region_index_from_vm_address,
 };
 
 pub use self::{
@@ -2791,18 +2793,21 @@ declare_builtin_function!(
                 MemoryRegion::new(&raw mut buffer[..], region.vm_addr)
             },
             GUEST_ACCOUNT_PAYLOAD_BASE_ADDRESS..GUEST_INSTRUCTION_DATA_BASE_ADDRESS => {
-                todo!()
+                let accounts = invoke_context.transaction_context.accounts();
+                accounts.abiv2_resize_account_payload_buffer(region_base_address, new_length)?
             }
-            GUEST_INSTRUCTION_DATA_BASE_ADDRESS..GUEST_INSTRUCTION_DATA_BASE_ADDRESS => {
-                todo!()
+            GUEST_INSTRUCTION_DATA_BASE_ADDRESS..GUEST_INSTRUCTION_ACCOUNT_BASE_ADDRESS => {
+                invoke_context.transaction_context.abiv2_resize_instruction_payload_region(region_base_address, new_length)?
             }
-            GUEST_INSTRUCTION_DATA_BASE_ADDRESS..MAXIMUM_VALID_ADDRESS => {
+            GUEST_INSTRUCTION_ACCOUNT_BASE_ADDRESS..MAXIMUM_VALID_ADDRESS => {
                 todo!()
             }
 
-            // Unknown or non-resizable region, even if mapped as writable?
-            // FIXME(?): this is a compatibility hazard.
-            _ => return Err(SyscallError::InvalidPointer.into());
+            _ => {
+                // FIXME(nagisa): this is a forward-compatibility hazard.
+                debug_assert!(false, "unknown writable region up for resizing?");
+                return Err(SyscallError::InvalidPointer.into());
+            }
         };
         unsafe {
             memory_mapping.replace_region(idx, new_region)?;
