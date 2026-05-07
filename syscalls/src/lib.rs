@@ -1,11 +1,4 @@
 #![cfg(feature = "agave-unstable-api")]
-use solana_sbpf::memory_region::MemoryRegion;
-use solana_transaction_context::vm_addresses::{
-    GUEST_ACCOUNT_PAYLOAD_BASE_ADDRESS, GUEST_INSTRUCTION_ACCOUNT_BASE_ADDRESS,
-    GUEST_INSTRUCTION_DATA_BASE_ADDRESS, MAXIMUM_VALID_ADDRESS, RETURN_DATA_SCRATCHPAD,
-    abiv2_region_index_from_vm_address,
-};
-
 pub use self::{
     cpi::{SyscallInvokeSignedC, SyscallInvokeSignedRust},
     logging::{
@@ -39,7 +32,7 @@ use {
     solana_pubkey::{MAX_SEED_LEN, MAX_SEEDS, PUBKEY_BYTES, Pubkey, PubkeyError},
     solana_sbpf::{
         declare_builtin_function,
-        memory_region::{AccessType, MemoryMapping},
+        memory_region::{AccessType, MemoryMapping, MemoryRegion},
         program::{BuiltinFunctionDefinition, BuiltinProgram, SBPFVersion},
         vm::Config,
     },
@@ -52,7 +45,14 @@ use {
     solana_svm_log_collector::{ic_logger_msg, ic_msg},
     solana_svm_type_overrides::sync::Arc,
     solana_sysvar::SysvarSerialize,
-    solana_transaction_context::vm_slice::VmSlice,
+    solana_transaction_context::{
+        vm_addresses::{
+            GUEST_ACCOUNT_PAYLOAD_BASE_ADDRESS, GUEST_INSTRUCTION_ACCOUNT_BASE_ADDRESS,
+            GUEST_INSTRUCTION_DATA_BASE_ADDRESS, MAXIMUM_VALID_ADDRESS, RETURN_DATA_SCRATCHPAD,
+            abiv2_region_index_from_vm_address,
+        },
+        vm_slice::VmSlice,
+    },
     std::{
         alloc::Layout,
         mem::{MaybeUninit, align_of, size_of},
@@ -2800,9 +2800,8 @@ declare_builtin_function!(
                 invoke_context.transaction_context.abiv2_resize_instruction_payload_region(region_base_address, new_length)?
             }
             GUEST_INSTRUCTION_ACCOUNT_BASE_ADDRESS..MAXIMUM_VALID_ADDRESS => {
-                todo!()
+                invoke_context.transaction_context.abiv2_resize_instruction_account_region(region_base_address, new_length)?
             }
-
             _ => {
                 // FIXME(nagisa): this is a forward-compatibility hazard.
                 debug_assert!(false, "unknown writable region up for resizing?");

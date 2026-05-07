@@ -2,7 +2,6 @@
 use crate::vm_addresses::abiv2_region_index_from_vm_address;
 #[cfg(feature = "dev-context-only-utils")]
 use qualifier_attr::qualifiers;
-
 use {crate::vm_slice::VmSlice, solana_pubkey::Pubkey, solana_sbpf::memory_region::VmExposable};
 #[cfg(not(any(target_arch = "bpf", target_arch = "sbf")))]
 use {

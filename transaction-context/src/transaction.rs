@@ -28,7 +28,7 @@ use {
 #[cfg(not(any(target_arch = "sbf", target_arch = "bpf")))]
 pub type InstructionTrace<'ix_data> = (
     Vec<InstructionFrame>,
-    Vec<Box<[InstructionAccount]>>,
+    Vec<Cow<'ix_data, [InstructionAccount]>>,
     Vec<Cow<'ix_data, [u8]>>,
 );
 
@@ -78,7 +78,7 @@ pub struct TransactionContext<'ix_data> {
     /// Each entry in `deduplication_maps` represents the deduplication map for each instruction.
     deduplication_maps: Vec<Box<[u16]>>,
     /// Each entry in `instruction_accounts` represents the array of accounts for each instruction.
-    instruction_accounts: Vec<Box<[InstructionAccount]>>,
+    instruction_accounts: Vec<Cow<'ix_data, [InstructionAccount]>>,
     /// Each entry in `instruction_data` represents the data for instruction at the corresponding
     /// index.
     instruction_data: Vec<Cow<'ix_data, [u8]>>,
@@ -323,7 +323,7 @@ impl<'ix_data> TransactionContext<'ix_data> {
         self.deduplication_maps
             .push(deduplication_map.into_boxed_slice());
         self.instruction_accounts
-            .push(instruction_accounts.into_boxed_slice());
+            .push(Cow::Owned(instruction_accounts));
         self.instruction_data.push(instruction_data);
         Ok(())
     }
@@ -652,6 +652,24 @@ impl<'ix_data> TransactionContext<'ix_data> {
         Ok(MemoryRegion::new(&raw mut ix.to_mut()[..], address))
     }
 
+    pub fn abiv2_resize_instruction_account_region(
+        &mut self,
+        address: u64,
+        new_len: u64,
+    ) -> Result<MemoryRegion, InstructionError> {
+        let ix_address = address
+            .checked_sub(GUEST_INSTRUCTION_ACCOUNT_BASE_ADDRESS)
+            .ok_or(InstructionError::InvalidArgument)?;
+        let ix_idx = abiv2_region_index_from_vm_address(ix_address);
+        let ix = self
+            .instruction_accounts
+            .get_mut(ix_idx)
+            .ok_or(InstructionError::InvalidArgument)?;
+        ix.to_mut()
+            .resize(new_len as usize, InstructionAccount::new(0, false, false));
+        Ok(MemoryRegion::new(&raw mut ix.to_mut()[..], address))
+    }
+
     pub fn instruction_accounts_regions(&self, regions: &mut [MemoryRegion]) {
         for ((ix_frame, accounts), region) in self
             .instruction_trace
@@ -659,13 +677,8 @@ impl<'ix_data> TransactionContext<'ix_data> {
             .zip(self.instruction_accounts.iter())
             .zip(regions.iter_mut())
         {
-            // FIXME: maybe implement HostObject?
-            let bytesize = ix_frame
-                .instruction_accounts
-                .len()
-                .saturating_mul(size_of::<InstructionAccount>() as u64);
-            let host_slice =
-                std::ptr::slice_from_raw_parts(accounts.as_ptr().cast::<u8>(), bytesize as usize);
+            let len = ix_frame.instruction_accounts.len();
+            let host_slice = std::ptr::slice_from_raw_parts(accounts.as_ptr(), len as usize);
             *region = MemoryRegion::new(host_slice, ix_frame.instruction_accounts.ptr());
         }
         self.fill_missing_instruction_regions(regions, GUEST_INSTRUCTION_ACCOUNT_BASE_ADDRESS);

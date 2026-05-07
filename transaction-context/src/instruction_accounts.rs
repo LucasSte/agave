@@ -1,4 +1,4 @@
-use crate::IndexOfAccount;
+use {crate::IndexOfAccount, solana_sbpf::memory_region::VmExposableMut};
 #[cfg(not(any(target_arch = "bpf", target_arch = "sbf")))]
 use {
     crate::{
@@ -56,6 +56,8 @@ impl InstructionAccount {
         self.is_writable = value as u8;
     }
 }
+
+unsafe impl VmExposableMut for InstructionAccount {}
 
 /// Shared account borrowed from the TransactionContext and an InstructionContext.
 #[cfg(not(any(target_arch = "bpf", target_arch = "sbf")))]
