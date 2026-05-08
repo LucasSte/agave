@@ -49,7 +49,6 @@ use {
         vm_addresses::{
             GUEST_ACCOUNT_PAYLOAD_BASE_ADDRESS, GUEST_INSTRUCTION_ACCOUNT_BASE_ADDRESS,
             GUEST_INSTRUCTION_DATA_BASE_ADDRESS, MAXIMUM_VALID_ADDRESS, RETURN_DATA_SCRATCHPAD,
-            abiv2_region_index_from_vm_address,
         },
         vm_slice::VmSlice,
     },
@@ -2767,29 +2766,31 @@ declare_builtin_function!(
         _arg4: u64,
         _arg5: u64,
     ) -> Result<u64, Error> {
-        let memory_mapping = invoke_context.memory_contexts.memory_mapping()?;
+        let compute_cost = invoke_context.get_execution_cost();
+        let byte_cost = compute_cost.set_buffer_length_byte_cost;
+        invoke_context
+            .compute_meter
+            .consume_checked(compute_cost.syscall_base_cost)?;
+
+        let memory_mapping = invoke_context.memory_contexts.memory_mapping_mut()?;
         let Some((idx, region)) = memory_mapping.find_region(region_base_address) else {
             return Err(SyscallError::InvalidPointer.into());
         };
         if region.vm_addr != region_base_address || !region.writable {
             return Err(SyscallError::InvalidPointer.into());
         }
-        if let Some(increase_bytes) = new_length.checked_sub(region.len) {
-            todo!("charge bytes for memset(0). Should we always charge for the entire new_length \
-                   to also account for realloc that possibly involves a memmove??");
+        if let Some(_increase_bytes) = new_length.checked_sub(region.len) {
+            // We have to charge for the entire new_length whenever the syscall increases the size
+            // of the buffer. That's because not only do we have to zero out the newly added
+            // capacity but also may need to copy data from the old buffer to a new one in case the
+            // increase in buffer size requires a realloc.
+            invoke_context.compute_meter.consume_checked(byte_cost.saturating_mul(new_length))?;
         }
 
         let new_region = match region_base_address {
             RETURN_DATA_SCRATCHPAD => {
                 let buffer = invoke_context.transaction_context.return_data_buffer_mut();
                 buffer.resize(new_length as usize, 0);
-                // FIXME(nagisa): RISKY! The above might have realloc'd, but replace_region can
-                // still fail, leaving the memory mapping in an entirely invalid and unsound state
-                // if used afterwards!
-                //
-                // To consider: removing the old mapping first before modifications so that code
-                // perturbations aren't problematic. At that point, although its a non-atomic 2 step
-                // operation, early exits out of this function aren't an unsoundness risk at least.
                 MemoryRegion::new(&raw mut buffer[..], region.vm_addr)
             },
             GUEST_ACCOUNT_PAYLOAD_BASE_ADDRESS..GUEST_INSTRUCTION_DATA_BASE_ADDRESS => {
@@ -2797,18 +2798,31 @@ declare_builtin_function!(
                 accounts.abiv2_resize_account_payload_buffer(region_base_address, new_length)?
             }
             GUEST_INSTRUCTION_DATA_BASE_ADDRESS..GUEST_INSTRUCTION_ACCOUNT_BASE_ADDRESS => {
-                invoke_context.transaction_context.abiv2_resize_instruction_payload_region(region_base_address, new_length)?
+                invoke_context.transaction_context.abiv2_resize_instruction_payload_region(
+                    region_base_address,
+                    new_length
+                )?
             }
             GUEST_INSTRUCTION_ACCOUNT_BASE_ADDRESS..MAXIMUM_VALID_ADDRESS => {
-                invoke_context.transaction_context.abiv2_resize_instruction_account_region(region_base_address, new_length)?
+                invoke_context.transaction_context.abiv2_resize_instruction_account_region(
+                    region_base_address,
+                    new_length
+                )?
             }
             _ => {
                 // FIXME(nagisa): this is a forward-compatibility hazard.
-                debug_assert!(false, "unknown writable region up for resizing?");
+                debug_assert!(false, "unknown writable region requested for resizing?");
                 return Err(SyscallError::InvalidPointer.into());
             }
         };
         unsafe {
+            // FIXME(nagisa): RISKY! The above might have realloc'd, but replace_region can
+            // still fail, leaving the memory mapping in an entirely invalid and unsound state
+            // if used afterwards!
+            //
+            // To consider: removing the old mapping first before modifications so that code
+            // perturbations aren't problematic. At that point, although its a non-atomic 2 step
+            // operation, early exits out of this function aren't an unsoundness risk at least.
             memory_mapping.replace_region(idx, new_region)?;
         }
         Ok(0)

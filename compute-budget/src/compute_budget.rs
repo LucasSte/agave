@@ -145,6 +145,9 @@ pub struct ComputeBudget {
     pub bls12_381_one_pair_cost: u64,
     /// Incremental number of compute units consumed per pair in a bls12_381 pairing.
     pub bls12_381_additional_pair_cost: u64,
+    /// Cost for `new_length` bytes when new buffer is reallocated and/or filled due to size
+    /// increase.
+    pub set_buffer_length_byte_cost: u64,
 }
 
 #[cfg(feature = "dev-context-only-utils")]
@@ -229,6 +232,7 @@ impl ComputeBudget {
             bls12_381_g2_validate_cost: cost.bls12_381_g2_validate_cost,
             bls12_381_one_pair_cost: cost.bls12_381_one_pair_cost,
             bls12_381_additional_pair_cost: cost.bls12_381_additional_pair_cost,
+            set_buffer_length_byte_cost: cost.set_buffer_length_byte_cost,
         }
     }
 
@@ -298,6 +302,7 @@ impl ComputeBudget {
             bls12_381_g2_validate_cost: self.bls12_381_g2_validate_cost,
             bls12_381_one_pair_cost: self.bls12_381_one_pair_cost,
             bls12_381_additional_pair_cost: self.bls12_381_additional_pair_cost,
+            set_buffer_length_byte_cost: self.set_buffer_length_byte_cost,
         }
     }
 

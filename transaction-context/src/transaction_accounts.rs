@@ -532,7 +532,7 @@ impl TransactionAccounts {
     }
 
     pub fn abiv2_resize_account_payload_buffer(
-        &mut self,
+        &self,
         address: u64,
         new_len: u64,
     ) -> Result<MemoryRegion, InstructionError> {
@@ -545,20 +545,20 @@ impl TransactionAccounts {
         let account_index = abiv2_region_index_from_vm_address(account_address);
         let account = self
             .private_account_fields
-            .get_mut(account_index)
+            .get(account_index)
             .ok_or(InstructionError::InvalidArgument)?;
         // FIXME(nagisa): this is potentially cloning possibly leading to divergence in both size
         // and contents with other reference holders.
-        let payload = Arc::make_mut(&mut account.get_mut().payload);
+        let payload = Arc::make_mut(unsafe { &mut (*account.get()).payload });
         payload.resize(new_len as usize, 0);
         let shared_fields = self
             .shared_account_fields
-            .get_mut(account_index)
+            .get(account_index)
             .ok_or(InstructionError::InvalidArgument)?;
         unsafe {
             // FIXME(nagisa): um, the doc-comment for shared fields says to not modify them, but if
             // we don't then the value seen by the guest becomes incorrect??
-            shared_fields.get_mut().payload.set_len(new_len);
+            (*shared_fields.get()).payload.set_len(new_len);
         }
         Ok(MemoryRegion::new(&raw mut payload[..], address))
     }
