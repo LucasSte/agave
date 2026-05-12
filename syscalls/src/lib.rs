@@ -32,7 +32,7 @@ use {
     solana_pubkey::{MAX_SEED_LEN, MAX_SEEDS, PUBKEY_BYTES, Pubkey, PubkeyError},
     solana_sbpf::{
         declare_builtin_function,
-        memory_region::{AccessType, MemoryMapping, MemoryRegion},
+        memory_region::{AccessType, MemoryMapping},
         program::{BuiltinFunctionDefinition, BuiltinProgram, SBPFVersion},
         vm::Config,
     },
@@ -45,13 +45,7 @@ use {
     solana_svm_log_collector::{ic_logger_msg, ic_msg},
     solana_svm_type_overrides::sync::Arc,
     solana_sysvar::SysvarSerialize,
-    solana_transaction_context::{
-        vm_addresses::{
-            GUEST_ACCOUNT_PAYLOAD_BASE_ADDRESS, GUEST_INSTRUCTION_ACCOUNT_BASE_ADDRESS,
-            GUEST_INSTRUCTION_DATA_BASE_ADDRESS, MAXIMUM_VALID_ADDRESS, RETURN_DATA_SCRATCHPAD,
-        },
-        vm_slice::VmSlice,
-    },
+    solana_transaction_context::vm_slice::VmSlice,
     std::{
         alloc::Layout,
         mem::{MaybeUninit, align_of, size_of},
@@ -2726,36 +2720,6 @@ declare_builtin_function!(
 );
 
 declare_builtin_function!(
-    /// Assign a new owner (as specified via `arg2: &[u8; 32]`) to the account specified in `arg1`.
-    SyscallAssignOwner,
-    fn rust(
-        invoke_context: &mut InvokeContext<'_, '_>,
-        account_index: u64,
-        new_owner_addr: u64,
-        _arg3: u64,
-        _arg4: u64,
-        _arg5: u64,
-    ) -> Result<u64, Error> {
-        todo!()
-    }
-);
-
-declare_builtin_function!(
-    /// Transfer `amount` lamports from account at `credit` to account at `debit`.
-    SyscallTransferLamports,
-    fn rust(
-        _invoke_context: &mut InvokeContext<'_, '_>,
-        credit_account_index: u64,
-        debit_account_index: u64,
-        amount: u64,
-        _arg4: u64,
-        _arg5: u64,
-    ) -> Result<u64, Error> {
-        todo!()
-    }
-);
-
-declare_builtin_function!(
     /// Resize the specified buffer to a new size.
     SyscallSetBufferLength,
     fn rust(
@@ -2786,35 +2750,10 @@ declare_builtin_function!(
             // increase in buffer size requires a realloc.
             invoke_context.compute_meter.consume_checked(byte_cost.saturating_mul(new_length))?;
         }
-
-        let new_region = match region_base_address {
-            RETURN_DATA_SCRATCHPAD => {
-                let buffer = invoke_context.transaction_context.return_data_buffer_mut();
-                buffer.resize(new_length as usize, 0);
-                MemoryRegion::new(&raw mut buffer[..], region.vm_addr)
-            },
-            GUEST_ACCOUNT_PAYLOAD_BASE_ADDRESS..GUEST_INSTRUCTION_DATA_BASE_ADDRESS => {
-                let accounts = invoke_context.transaction_context.accounts();
-                accounts.abiv2_resize_account_payload_buffer(region_base_address, new_length)?
-            }
-            GUEST_INSTRUCTION_DATA_BASE_ADDRESS..GUEST_INSTRUCTION_ACCOUNT_BASE_ADDRESS => {
-                invoke_context.transaction_context.abiv2_resize_instruction_payload_region(
-                    region_base_address,
-                    new_length
-                )?
-            }
-            GUEST_INSTRUCTION_ACCOUNT_BASE_ADDRESS..MAXIMUM_VALID_ADDRESS => {
-                invoke_context.transaction_context.abiv2_resize_instruction_account_region(
-                    region_base_address,
-                    new_length
-                )?
-            }
-            _ => {
-                // FIXME(nagisa): this is a forward-compatibility hazard.
-                debug_assert!(false, "unknown writable region requested for resizing?");
-                return Err(SyscallError::InvalidPointer.into());
-            }
-        };
+        let new_region = invoke_context.transaction_context.resize_region(
+            region_base_address,
+            new_length
+        )?;
         unsafe {
             // FIXME(nagisa): RISKY! The above might have realloc'd, but replace_region can
             // still fail, leaving the memory mapping in an entirely invalid and unsound state

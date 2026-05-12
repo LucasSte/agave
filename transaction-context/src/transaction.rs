@@ -7,7 +7,8 @@ use {
         instruction_accounts::InstructionAccount,
         transaction_accounts::{KeyedAccountSharedData, TransactionAccounts},
         vm_addresses::{
-            GUEST_INSTRUCTION_DATA_BASE_ADDRESS, GUEST_REGION_SIZE, RETURN_DATA_SCRATCHPAD,
+            GUEST_ACCOUNT_PAYLOAD_BASE_ADDRESS, GUEST_INSTRUCTION_DATA_BASE_ADDRESS,
+            GUEST_REGION_SIZE, MAXIMUM_VALID_ADDRESS, RETURN_DATA_SCRATCHPAD,
             abiv2_region_index_from_vm_address,
         },
     },
@@ -17,7 +18,7 @@ use {
     solana_rent::Rent,
     solana_sbpf::memory_region::VmExposable,
     solana_sbpf::memory_region::{AccessType, AccessViolationHandler, MemoryRegion},
-    std::{borrow::Cow, cell::Cell, rc::Rc},
+    std::{borrow::Cow, cell::Cell, rc::Rc, sync::Arc},
 };
 use {
     crate::{vm_addresses::GUEST_INSTRUCTION_ACCOUNT_BASE_ADDRESS, vm_slice::VmSlice},
@@ -618,10 +619,6 @@ impl<'ix_data> TransactionContext<'ix_data> {
         &self.return_data_bytes
     }
 
-    pub fn return_data_buffer_mut(&mut self) -> &mut Vec<u8> {
-        &mut self.return_data_bytes
-    }
-
     pub fn instruction_payload_regions(&self, regions: &mut [MemoryRegion]) {
         for ((ix_frame, ix_data), region) in self
             .instruction_trace
@@ -633,41 +630,6 @@ impl<'ix_data> TransactionContext<'ix_data> {
         }
 
         self.fill_missing_instruction_regions(regions, GUEST_INSTRUCTION_DATA_BASE_ADDRESS);
-    }
-
-    pub fn abiv2_resize_instruction_payload_region(
-        &mut self,
-        address: u64,
-        new_len: u64,
-    ) -> Result<MemoryRegion, InstructionError> {
-        let ix_address = address
-            .checked_sub(GUEST_INSTRUCTION_DATA_BASE_ADDRESS)
-            .ok_or(InstructionError::InvalidArgument)?;
-        let ix_idx = abiv2_region_index_from_vm_address(ix_address);
-        let ix = self
-            .instruction_data
-            .get_mut(ix_idx)
-            .ok_or(InstructionError::InvalidArgument)?;
-        ix.to_mut().resize(new_len as usize, 0);
-        Ok(MemoryRegion::new(&raw mut ix.to_mut()[..], address))
-    }
-
-    pub fn abiv2_resize_instruction_account_region(
-        &mut self,
-        address: u64,
-        new_len: u64,
-    ) -> Result<MemoryRegion, InstructionError> {
-        let ix_address = address
-            .checked_sub(GUEST_INSTRUCTION_ACCOUNT_BASE_ADDRESS)
-            .ok_or(InstructionError::InvalidArgument)?;
-        let ix_idx = abiv2_region_index_from_vm_address(ix_address);
-        let ix = self
-            .instruction_accounts
-            .get_mut(ix_idx)
-            .ok_or(InstructionError::InvalidArgument)?;
-        ix.to_mut()
-            .resize(new_len as usize, InstructionAccount::new(0, false, false));
-        Ok(MemoryRegion::new(&raw mut ix.to_mut()[..], address))
     }
 
     pub fn instruction_accounts_regions(&self, regions: &mut [MemoryRegion]) {
@@ -692,6 +654,77 @@ impl<'ix_data> TransactionContext<'ix_data> {
                 GUEST_REGION_SIZE.saturating_mul(idx.saturating_add(num_ixs) as u64),
             );
         }
+    }
+
+    pub fn resize_region(
+        &mut self,
+        address: u64,
+        new_len: u64,
+    ) -> Result<MemoryRegion, InstructionError> {
+        let new_region = match address {
+            RETURN_DATA_SCRATCHPAD => {
+                self.return_data_bytes.resize(new_len as usize, 0);
+                MemoryRegion::new(&raw mut self.return_data_bytes[..], address)
+            }
+            GUEST_ACCOUNT_PAYLOAD_BASE_ADDRESS..GUEST_INSTRUCTION_DATA_BASE_ADDRESS => {
+                let accounts = self.accounts();
+                if new_len > MAX_ACCOUNT_DATA_LEN {
+                    return Err(InstructionError::InvalidRealloc);
+                }
+                let account_address = address
+                    .checked_sub(GUEST_ACCOUNT_PAYLOAD_BASE_ADDRESS)
+                    .ok_or(InstructionError::InvalidArgument)?;
+                let account_index = abiv2_region_index_from_vm_address(account_address);
+                let account = accounts
+                    .private_account_fields
+                    .get(account_index)
+                    .ok_or(InstructionError::InvalidArgument)?;
+                let payload = Arc::make_mut(unsafe { &mut (*account.get()).payload });
+                accounts.update_accounts_resize_delta(payload.len(), new_len as usize)?;
+                payload.resize(new_len as usize, 0);
+                let shared_fields = (&accounts)
+                    .shared_account_fields
+                    .get(account_index)
+                    .ok_or(InstructionError::InvalidArgument)?;
+                unsafe {
+                    // FIXME(nagisa): the doc-comment for shared fields says to not modify fields,
+                    // but if we don't then the value seen by the guest becomes incorrect??
+                    (*shared_fields.get()).payload.set_len(new_len);
+                }
+                MemoryRegion::new(&raw mut payload[..], address)
+            }
+            GUEST_INSTRUCTION_DATA_BASE_ADDRESS..GUEST_INSTRUCTION_ACCOUNT_BASE_ADDRESS => {
+                let ix_address = address
+                    .checked_sub(GUEST_INSTRUCTION_DATA_BASE_ADDRESS)
+                    .ok_or(InstructionError::InvalidArgument)?;
+                let ix_idx = abiv2_region_index_from_vm_address(ix_address);
+                let ix = self
+                    .instruction_data
+                    .get_mut(ix_idx)
+                    .ok_or(InstructionError::InvalidArgument)?;
+                ix.to_mut().resize(new_len as usize, 0);
+                MemoryRegion::new(&raw mut ix.to_mut()[..], address)
+            }
+            GUEST_INSTRUCTION_ACCOUNT_BASE_ADDRESS..MAXIMUM_VALID_ADDRESS => {
+                let ix_address = address
+                    .checked_sub(GUEST_INSTRUCTION_ACCOUNT_BASE_ADDRESS)
+                    .ok_or(InstructionError::InvalidArgument)?;
+                let ix_idx = abiv2_region_index_from_vm_address(ix_address);
+                let ix = self
+                    .instruction_accounts
+                    .get_mut(ix_idx)
+                    .ok_or(InstructionError::InvalidArgument)?;
+                ix.to_mut()
+                    .resize(new_len as usize, InstructionAccount::new(0, false, false));
+                MemoryRegion::new(&raw mut ix.to_mut()[..], address)
+            }
+            _ => {
+                // FIXME(nagisa): this is a forward-compatibility hazard.
+                debug_assert!(false, "unknown writable region requested for resizing?");
+                return Err(InstructionError::InvalidArgument);
+            }
+        };
+        Ok(new_region)
     }
 }
 

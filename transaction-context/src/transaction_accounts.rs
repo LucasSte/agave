@@ -1,5 +1,3 @@
-#[cfg(not(any(target_arch = "bpf", target_arch = "sbf")))]
-use crate::vm_addresses::abiv2_region_index_from_vm_address;
 #[cfg(feature = "dev-context-only-utils")]
 use qualifier_attr::qualifiers;
 use {crate::vm_slice::VmSlice, solana_pubkey::Pubkey, solana_sbpf::memory_region::VmExposable};
@@ -37,10 +35,10 @@ impl VmExposable for AccountSharedFields {}
 
 #[derive(Debug, PartialEq)]
 #[cfg(not(any(target_arch = "bpf", target_arch = "sbf")))]
-struct AccountPrivateFields {
+pub(crate) struct AccountPrivateFields {
     rent_epoch: u64,
     executable: bool,
-    payload: Arc<Vec<u8>>,
+    pub(crate) payload: Arc<Vec<u8>>,
 }
 
 #[cfg(not(any(target_arch = "bpf", target_arch = "sbf")))]
@@ -243,8 +241,8 @@ pub(crate) type DeconstructedTransactionAccounts =
 #[derive(Debug)]
 #[cfg(not(any(target_arch = "bpf", target_arch = "sbf")))]
 pub struct TransactionAccounts {
-    shared_account_fields: Box<[UnsafeCell<AccountSharedFields>]>,
-    private_account_fields: Box<[UnsafeCell<AccountPrivateFields>]>,
+    pub(crate) shared_account_fields: Box<[UnsafeCell<AccountSharedFields>]>,
+    pub(crate) private_account_fields: Box<[UnsafeCell<AccountPrivateFields>]>,
     borrow_counters: Box<[BorrowCounter]>,
     touched_flags: Box<[Cell<bool>]>,
     resize_delta: Cell<i64>,
@@ -529,38 +527,6 @@ impl TransactionAccounts {
                 GUEST_REGION_SIZE.saturating_mul(accounts_no.saturating_add(idx) as u64),
             )
         }
-    }
-
-    pub fn abiv2_resize_account_payload_buffer(
-        &self,
-        address: u64,
-        new_len: u64,
-    ) -> Result<MemoryRegion, InstructionError> {
-        if new_len > MAX_ACCOUNT_DATA_LEN {
-            return Err(InstructionError::InvalidRealloc);
-        }
-        let account_address = address
-            .checked_sub(GUEST_ACCOUNT_PAYLOAD_BASE_ADDRESS)
-            .ok_or(InstructionError::InvalidArgument)?;
-        let account_index = abiv2_region_index_from_vm_address(account_address);
-        let account = self
-            .private_account_fields
-            .get(account_index)
-            .ok_or(InstructionError::InvalidArgument)?;
-        // FIXME(nagisa): this is potentially cloning possibly leading to divergence in both size
-        // and contents with other reference holders.
-        let payload = Arc::make_mut(unsafe { &mut (*account.get()).payload });
-        payload.resize(new_len as usize, 0);
-        let shared_fields = self
-            .shared_account_fields
-            .get(account_index)
-            .ok_or(InstructionError::InvalidArgument)?;
-        unsafe {
-            // FIXME(nagisa): um, the doc-comment for shared fields says to not modify them, but if
-            // we don't then the value seen by the guest becomes incorrect??
-            (*shared_fields.get()).payload.set_len(new_len);
-        }
-        Ok(MemoryRegion::new(&raw mut payload[..], address))
     }
 }
 
