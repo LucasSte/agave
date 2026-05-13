@@ -511,7 +511,7 @@ impl TransactionAccounts {
             unsafe {
                 // We are sharing the payload of all accounts as readonly
                 *region = MemoryRegion::new(
-                    (*private_fields.get()).payload.as_slice() as *const [u8],
+                    &raw const (*(*private_fields.get()).payload)[..],
                     (*shared_fields.get()).payload.ptr(),
                 );
             };

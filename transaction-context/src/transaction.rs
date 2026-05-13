@@ -1432,7 +1432,6 @@ mod tests {
                 .saturating_add(GUEST_REGION_SIZE.saturating_mul(2u64))
         );
         assert_eq!(r3.len, 0);
-        assert_eq!(r3.host_addr, 0);
 
         let r4 = regions.get(3).unwrap();
         assert_eq!(
@@ -1441,7 +1440,6 @@ mod tests {
                 .saturating_add(GUEST_REGION_SIZE.saturating_mul(3u64))
         );
         assert_eq!(r4.len, 0);
-        assert_eq!(r4.host_addr, 0);
     }
 
     #[test]
@@ -1524,7 +1522,6 @@ mod tests {
                 .saturating_add(GUEST_REGION_SIZE.saturating_mul(2u64))
         );
         assert_eq!(r3.len, 0);
-        assert_eq!(r3.host_addr, 0);
 
         let r4 = regions.get(3).unwrap();
         assert_eq!(
@@ -1533,6 +1530,5 @@ mod tests {
                 .saturating_add(GUEST_REGION_SIZE.saturating_mul(3u64))
         );
         assert_eq!(r4.len, 0);
-        assert_eq!(r4.host_addr, 0);
     }
 }
