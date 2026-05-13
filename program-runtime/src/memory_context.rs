@@ -150,6 +150,29 @@ impl MemoryContexts {
             .ok_or(InstructionError::CallDepth)? = MemoryContextType::ABIv2;
         Ok(())
     }
+
+    pub fn update_abi_v2_account_permissions(
+        &mut self,
+        transaction_context: &TransactionContext,
+    ) -> Result<(), InstructionError> {
+        let current_instruction = transaction_context.get_current_instruction_context()?;
+
+        let accounts_index = (GUEST_ACCOUNT_PAYLOAD_BASE_ADDRESS >> 32) as usize;
+        let range = accounts_index..accounts_index.saturating_add(MAX_ACCOUNTS_PER_TRANSACTION);
+        let account_regions = self
+            .abiv2_mappings
+            .get_regions_mut()
+            .get_mut(range)
+            .expect("Account regions should have been configured.");
+        for account in current_instruction.instruction_accounts() {
+            let acc_region = account_regions
+                .get_mut(account.index_in_transaction as usize)
+                .expect("Account must exist");
+            acc_region.writable = account.is_writable();
+        }
+
+        Ok(())
+    }
 }
 
 /// This structure contains metadata about the memory for each instruction under execution.
