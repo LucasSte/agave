@@ -288,75 +288,112 @@ pub(crate) fn create_abiv2_regions(transaction_context: &TransactionContext) -> 
 
 #[cfg(test)]
 mod test {
-    use std::borrow::Cow;
-    use solana_account::AccountSharedData;
-    use solana_pubkey::Pubkey;
-    use solana_rent::Rent;
-    use solana_sbpf::memory_region::{default_access_violation_handler, MemoryMapping};
-    use solana_sbpf::program::SBPFVersion;
-    use solana_sbpf::vm::Config;
-    use solana_transaction_context::instruction_accounts::InstructionAccount;
-    use solana_transaction_context::MAX_ACCOUNTS_PER_TRANSACTION;
-    use solana_transaction_context::transaction::TransactionContext;
-    use solana_transaction_context::vm_addresses::{GUEST_ACCOUNT_PAYLOAD_BASE_ADDRESS};
-    use crate::memory_context::{create_abiv2_regions, MemoryContexts};
+    use {
+        crate::memory_context::{MemoryContexts, create_abiv2_regions},
+        solana_account::AccountSharedData,
+        solana_pubkey::Pubkey,
+        solana_rent::Rent,
+        solana_sbpf::{
+            memory_region::{MemoryMapping, default_access_violation_handler},
+            program::SBPFVersion,
+            vm::Config,
+        },
+        solana_transaction_context::{
+            MAX_ACCOUNTS_PER_TRANSACTION, instruction_accounts::InstructionAccount,
+            transaction::TransactionContext, vm_addresses::GUEST_ACCOUNT_PAYLOAD_BASE_ADDRESS,
+        },
+        std::borrow::Cow,
+    };
 
     #[test]
     fn test_update_account_permissions() {
         let accounts = vec![
-            (Pubkey::new_unique(), AccountSharedData::new(20, 10, &Pubkey::new_unique())),
-            (Pubkey::new_unique(), AccountSharedData::new(30, 15, &Pubkey::new_unique())),
-            (Pubkey::new_unique(), AccountSharedData::new(40, 5, &Pubkey::new_unique())),
+            (
+                Pubkey::new_unique(),
+                AccountSharedData::new(20, 10, &Pubkey::new_unique()),
+            ),
+            (
+                Pubkey::new_unique(),
+                AccountSharedData::new(30, 15, &Pubkey::new_unique()),
+            ),
+            (
+                Pubkey::new_unique(),
+                AccountSharedData::new(40, 5, &Pubkey::new_unique()),
+            ),
         ];
 
-        let mut tx_context = TransactionContext::new(
-            accounts,
-            Rent::default(),
-            4,
-            64,
-            3,
-        );
+        let mut tx_context = TransactionContext::new(accounts, Rent::default(), 4, 64, 3);
 
-        tx_context.configure_instruction_at_index(
-            0,
-            0,
-            vec![InstructionAccount::new(0, false, false), InstructionAccount::new(2, false, true), InstructionAccount::new(1, false, false)],
-            vec![u16::MAX; MAX_ACCOUNTS_PER_TRANSACTION],
-            Cow::Owned(Vec::new()),
-            None,
-        ).unwrap();
+        tx_context
+            .configure_instruction_at_index(
+                0,
+                0,
+                vec![
+                    InstructionAccount::new(0, false, false),
+                    InstructionAccount::new(2, false, true),
+                    InstructionAccount::new(1, false, false),
+                ],
+                vec![u16::MAX; MAX_ACCOUNTS_PER_TRANSACTION],
+                Cow::Owned(Vec::new()),
+                None,
+            )
+            .unwrap();
 
-        tx_context.configure_instruction_at_index(
-            0,
-            0,
-            vec![InstructionAccount::new(1, false, false), InstructionAccount::new(2, false, false), InstructionAccount::new(0, false, true)],
-            vec![u16::MAX; MAX_ACCOUNTS_PER_TRANSACTION],
-            Cow::Owned(Vec::new()),
-            None,
-        ).unwrap();
+        tx_context
+            .configure_instruction_at_index(
+                0,
+                0,
+                vec![
+                    InstructionAccount::new(1, false, false),
+                    InstructionAccount::new(2, false, false),
+                    InstructionAccount::new(0, false, true),
+                ],
+                vec![u16::MAX; MAX_ACCOUNTS_PER_TRANSACTION],
+                Cow::Owned(Vec::new()),
+                None,
+            )
+            .unwrap();
 
-        tx_context.configure_instruction_at_index(
-            0,
-            0,
-            vec![InstructionAccount::new(0, false, true), InstructionAccount::new(1, false, true), InstructionAccount::new(2, false, false)],
-            vec![u16::MAX; MAX_ACCOUNTS_PER_TRANSACTION],
-            Cow::Owned(Vec::new()),
-            None,
-        ).unwrap();
+        tx_context
+            .configure_instruction_at_index(
+                0,
+                0,
+                vec![
+                    InstructionAccount::new(0, false, true),
+                    InstructionAccount::new(1, false, true),
+                    InstructionAccount::new(2, false, false),
+                ],
+                vec![u16::MAX; MAX_ACCOUNTS_PER_TRANSACTION],
+                Cow::Owned(Vec::new()),
+                None,
+            )
+            .unwrap();
 
         let mut memory_contexts = MemoryContexts::new();
         let abi_v2_regions = create_abiv2_regions(&tx_context);
         *memory_contexts.abiv2_mappings = unsafe {
-            MemoryMapping::new_uninitialized(abi_v2_regions, &Config::default(), SBPFVersion::V4, Box::new(default_access_violation_handler))
+            MemoryMapping::new_uninitialized(
+                abi_v2_regions,
+                &Config::default(),
+                SBPFVersion::V4,
+                Box::new(default_access_violation_handler),
+            )
         };
 
+        let accounts_range = ((GUEST_ACCOUNT_PAYLOAD_BASE_ADDRESS >> 32) as usize)
+            ..((GUEST_ACCOUNT_PAYLOAD_BASE_ADDRESS >> 32) as usize)
+                .saturating_add(MAX_ACCOUNTS_PER_TRANSACTION);
 
-        let accounts_range = ((GUEST_ACCOUNT_PAYLOAD_BASE_ADDRESS >> 32) as usize)..((GUEST_ACCOUNT_PAYLOAD_BASE_ADDRESS >> 32) as usize).saturating_add(MAX_ACCOUNTS_PER_TRANSACTION);
-        
         // IX 1
         tx_context.push().unwrap();
-        memory_contexts.update_abi_v2_account_permissions(&tx_context).unwrap();
-        let ix1_regions = memory_contexts.abiv2_mappings.get_regions().get(accounts_range.clone()).unwrap();
+        memory_contexts
+            .update_abi_v2_account_permissions(&tx_context)
+            .unwrap();
+        let ix1_regions = memory_contexts
+            .abiv2_mappings
+            .get_regions()
+            .get(accounts_range.clone())
+            .unwrap();
         assert!(!ix1_regions.first().unwrap().writable);
         assert!(!ix1_regions.get(1).unwrap().writable);
         assert!(ix1_regions.get(2).unwrap().writable);
@@ -367,8 +404,14 @@ mod test {
         // IX 2
         tx_context.pop().unwrap();
         tx_context.push().unwrap();
-        memory_contexts.update_abi_v2_account_permissions(&tx_context).unwrap();
-        let ix2_regions = memory_contexts.abiv2_mappings.get_regions().get(accounts_range.clone()).unwrap();
+        memory_contexts
+            .update_abi_v2_account_permissions(&tx_context)
+            .unwrap();
+        let ix2_regions = memory_contexts
+            .abiv2_mappings
+            .get_regions()
+            .get(accounts_range.clone())
+            .unwrap();
         assert!(ix2_regions.first().unwrap().writable);
         assert!(!ix2_regions.get(1).unwrap().writable);
         assert!(!ix2_regions.get(2).unwrap().writable);
@@ -379,8 +422,14 @@ mod test {
         // IX 3
         tx_context.pop().unwrap();
         tx_context.push().unwrap();
-        memory_contexts.update_abi_v2_account_permissions(&tx_context).unwrap();
-        let ix3_regions = memory_contexts.abiv2_mappings.get_regions().get(accounts_range.clone()).unwrap();
+        memory_contexts
+            .update_abi_v2_account_permissions(&tx_context)
+            .unwrap();
+        let ix3_regions = memory_contexts
+            .abiv2_mappings
+            .get_regions()
+            .get(accounts_range.clone())
+            .unwrap();
         assert!(ix3_regions.first().unwrap().writable);
         assert!(ix3_regions.get(1).unwrap().writable);
         assert!(!ix3_regions.get(2).unwrap().writable);
