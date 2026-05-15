@@ -2731,7 +2731,7 @@ declare_builtin_function!(
         _arg5: u64,
     ) -> Result<u64, Error> {
         let compute_cost = invoke_context.get_execution_cost();
-        let byte_cost = compute_cost.set_buffer_length_byte_cost;
+        let cpi_bytes_per_unit = compute_cost.cpi_bytes_per_unit;
         invoke_context
             .compute_meter
             .consume_checked(compute_cost.syscall_base_cost)?;
@@ -2751,7 +2751,8 @@ declare_builtin_function!(
             //
             // This may change in the future if we end up using something fancier as the backing
             // storage.
-            invoke_context.compute_meter.consume_checked(byte_cost.saturating_mul(new_length))?;
+            let cost = new_length.checked_div(cpi_bytes_per_unit).unwrap_or(u64::MAX);
+            invoke_context.compute_meter.consume_checked(cost)?;
         }
         let new_region = invoke_context.transaction_context.resize_region(
             region_base_address,

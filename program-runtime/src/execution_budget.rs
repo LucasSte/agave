@@ -200,8 +200,6 @@ pub struct SVMTransactionExecutionCost {
     pub bls12_381_one_pair_cost: u64,
     /// Incremental number of compute units consumed per pair in a bls12_381 pairing.
     pub bls12_381_additional_pair_cost: u64,
-    /// Cost for `set_buffer_length` syscall charged when reallocation and memset might happen.
-    pub set_buffer_length_byte_cost: u64,
 }
 
 impl Default for SVMTransactionExecutionCost {
@@ -258,7 +256,6 @@ impl Default for SVMTransactionExecutionCost {
             bls12_381_g2_validate_cost: 1_968,
             bls12_381_one_pair_cost: 25_445,
             bls12_381_additional_pair_cost: 13_023,
-            set_buffer_length_byte_cost: 1,
         }
     }
 }
