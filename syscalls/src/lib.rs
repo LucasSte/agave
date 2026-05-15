@@ -2776,13 +2776,8 @@ declare_builtin_function!(
 #[allow(clippy::arithmetic_side_effects)]
 #[allow(clippy::indexing_slicing)]
 mod tests {
-    use solana_program_runtime::{
-        invoke_context::Executable, memory_context::create_abiv2_regions,
-    };
-    use solana_sbpf::assembler::assemble;
     #[allow(deprecated)]
     use solana_sysvar::fees::Fees;
-    use solana_transaction_context::vm_addresses::{GUEST_REGION_SIZE, MAXIMUM_VALID_ADDRESS};
     use {
         super::*,
         assert_matches::assert_matches,
@@ -2799,13 +2794,14 @@ mod tests {
         solana_program::program::check_type_assumptions,
         solana_program_runtime::{
             execution_budget::MAX_HEAP_FRAME_BYTES,
-            invoke_context::{BpfAllocator, InvokeContext},
+            invoke_context::{BpfAllocator, Executable, InvokeContext},
             memory::address_is_aligned,
-            memory_context::MemoryContext,
+            memory_context::{MemoryContext, create_abiv2_regions},
             with_mock_invoke_context, with_mock_invoke_context_with_feature_set,
         },
         solana_sbpf::{
             aligned_memory::AlignedMemory,
+            assembler::assemble,
             ebpf::{self, HOST_ALIGN},
             error::EbpfError,
             memory_region::{MemoryMapping, MemoryRegion},
@@ -2820,7 +2816,10 @@ mod tests {
         solana_stable_layout::stable_instruction::StableInstruction,
         solana_stake_interface::stake_history::{self, StakeHistory, StakeHistoryEntry},
         solana_sysvar_id::SysvarId,
-        solana_transaction_context::instruction_accounts::InstructionAccount,
+        solana_transaction_context::{
+            instruction_accounts::InstructionAccount,
+            vm_addresses::{GUEST_REGION_SIZE, MAXIMUM_VALID_ADDRESS},
+        },
         std::{
             hash::{DefaultHasher, Hash, Hasher},
             mem,

@@ -18,7 +18,7 @@ use {
     solana_rent::Rent,
     solana_sbpf::memory_region::VmExposable,
     solana_sbpf::memory_region::{AccessType, AccessViolationHandler, MemoryRegion},
-    std::{borrow::Cow, cell::Cell, rc::Rc, sync::Arc},
+    std::{borrow::Cow, cell::Cell, rc::Rc},
 };
 use {
     crate::{vm_addresses::GUEST_INSTRUCTION_ACCOUNT_BASE_ADDRESS, vm_slice::VmSlice},
@@ -664,6 +664,11 @@ impl<'ix_data> TransactionContext<'ix_data> {
         let new_region = match address {
             RETURN_DATA_SCRATCHPAD => {
                 self.return_data_bytes.resize(new_len as usize, 0);
+                unsafe {
+                    self.transaction_frame
+                        .return_data_scratchpad
+                        .set_len(new_len);
+                }
                 MemoryRegion::new(&raw mut self.return_data_bytes[..], address)
             }
             GUEST_ACCOUNT_PAYLOAD_BASE_ADDRESS..GUEST_INSTRUCTION_DATA_BASE_ADDRESS => {
@@ -674,24 +679,14 @@ impl<'ix_data> TransactionContext<'ix_data> {
                 let account_address = address
                     .checked_sub(GUEST_ACCOUNT_PAYLOAD_BASE_ADDRESS)
                     .ok_or(InstructionError::InvalidArgument)?;
-                let account_index = abiv2_region_index_from_vm_address(account_address);
-                let account = accounts
-                    .private_account_fields
-                    .get(account_index)
-                    .ok_or(InstructionError::InvalidArgument)?;
-                let payload = Arc::make_mut(unsafe { &mut (*account.get()).payload });
-                accounts.update_accounts_resize_delta(payload.len(), new_len as usize)?;
-                payload.resize(new_len as usize, 0);
-                let shared_fields = (&accounts)
-                    .shared_account_fields
-                    .get(account_index)
-                    .ok_or(InstructionError::InvalidArgument)?;
-                unsafe {
-                    // FIXME(nagisa): the doc-comment for shared fields says to not modify fields,
-                    // but if we don't then the value seen by the guest becomes incorrect??
-                    (*shared_fields.get()).payload.set_len(new_len);
-                }
-                MemoryRegion::new(&raw mut payload[..], address)
+                let account_index = abiv2_region_index_from_vm_address(account_address) as u16;
+                let mut account = accounts.try_borrow_mut(account_index)?;
+                accounts.touch(account_index)?;
+                let old_length = account.data().len();
+                accounts.can_data_be_resized(old_length, new_len as usize)?;
+                accounts.update_accounts_resize_delta(old_length, new_len as usize)?;
+                account.resize(new_len as usize, 0);
+                MemoryRegion::new(account.raw_mut_data_slice(), address)
             }
             GUEST_INSTRUCTION_DATA_BASE_ADDRESS..GUEST_INSTRUCTION_ACCOUNT_BASE_ADDRESS => {
                 let ix_address = address
