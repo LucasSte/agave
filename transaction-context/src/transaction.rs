@@ -7,17 +7,14 @@ use {
         instruction_accounts::InstructionAccount,
         transaction_accounts::{KeyedAccountSharedData, TransactionAccounts},
         vm_addresses::{
-            GUEST_ACCOUNT_PAYLOAD_BASE_ADDRESS, GUEST_INSTRUCTION_DATA_BASE_ADDRESS,
-            GUEST_REGION_SIZE, MAXIMUM_VALID_ADDRESS, RETURN_DATA_SCRATCHPAD,
-            abiv2_region_index_from_vm_address,
+            GUEST_ACCOUNT_PAYLOAD_BASE_ADDRESS, GUEST_ACCOUNT_PAYLOAD_END_ADDRESS, GUEST_INSTRUCTION_ACCOUNT_END_ADDRESS, GUEST_INSTRUCTION_DATA_BASE_ADDRESS, GUEST_INSTRUCTION_DATA_END_ADDRESS, GUEST_REGION_SIZE, RETURN_DATA_SCRATCHPAD, abiv2_region_index_from_vm_address
         },
     },
     solana_account::{AccountSharedData, ReadableAccount, WritableAccount},
     solana_instruction::error::InstructionError,
     solana_instructions_sysvar as instructions,
     solana_rent::Rent,
-    solana_sbpf::memory_region::VmExposable,
-    solana_sbpf::memory_region::{AccessType, AccessViolationHandler, MemoryRegion},
+    solana_sbpf::memory_region::{AccessType, AccessViolationHandler, MemoryRegion, VmExposable},
     std::{borrow::Cow, cell::Cell, rc::Rc},
 };
 use {
@@ -670,7 +667,7 @@ impl<'ix_data> TransactionContext<'ix_data> {
                 }
                 MemoryRegion::new(&raw mut self.return_data_bytes[..], address)
             }
-            GUEST_ACCOUNT_PAYLOAD_BASE_ADDRESS..GUEST_INSTRUCTION_DATA_BASE_ADDRESS => {
+            GUEST_ACCOUNT_PAYLOAD_BASE_ADDRESS..GUEST_ACCOUNT_PAYLOAD_END_ADDRESS => {
                 let accounts = self.accounts();
                 if new_len > MAX_ACCOUNT_DATA_LEN {
                     return Err(InstructionError::InvalidRealloc);
@@ -687,7 +684,7 @@ impl<'ix_data> TransactionContext<'ix_data> {
                 account.resize(new_len as usize, 0);
                 MemoryRegion::new(account.raw_mut_data_slice(), address)
             }
-            GUEST_INSTRUCTION_DATA_BASE_ADDRESS..GUEST_INSTRUCTION_ACCOUNT_BASE_ADDRESS => {
+            GUEST_INSTRUCTION_DATA_BASE_ADDRESS..GUEST_INSTRUCTION_DATA_END_ADDRESS => {
                 let ix_address = address
                     .checked_sub(GUEST_INSTRUCTION_DATA_BASE_ADDRESS)
                     .ok_or(InstructionError::InvalidArgument)?;
@@ -706,7 +703,7 @@ impl<'ix_data> TransactionContext<'ix_data> {
                 data_vec.resize(new_len as usize, 0);
                 MemoryRegion::new(&raw mut data_vec[..], address)
             }
-            GUEST_INSTRUCTION_ACCOUNT_BASE_ADDRESS..MAXIMUM_VALID_ADDRESS => {
+            GUEST_INSTRUCTION_ACCOUNT_BASE_ADDRESS..GUEST_INSTRUCTION_ACCOUNT_END_ADDRESS => {
                 let ix_address = address
                     .checked_sub(GUEST_INSTRUCTION_ACCOUNT_BASE_ADDRESS)
                     .ok_or(InstructionError::InvalidArgument)?;
