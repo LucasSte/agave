@@ -696,8 +696,15 @@ impl<'ix_data> TransactionContext<'ix_data> {
                     .instruction_data
                     .get_mut(ix_idx)
                     .ok_or(InstructionError::InvalidArgument)?;
-                ix.to_mut().resize(new_len as usize, 0);
-                MemoryRegion::new(&raw mut ix.to_mut()[..], address)
+                let data_vec = match ix {
+                    Cow::Owned(vec) => vec,
+                    Cow::Borrowed(_) => {
+                        debug_assert!(false, "writable region implies ownership of ix data");
+                        ix.to_mut()
+                    }
+                };
+                data_vec.resize(new_len as usize, 0);
+                MemoryRegion::new(&raw mut data_vec[..], address)
             }
             GUEST_INSTRUCTION_ACCOUNT_BASE_ADDRESS..MAXIMUM_VALID_ADDRESS => {
                 let ix_address = address
