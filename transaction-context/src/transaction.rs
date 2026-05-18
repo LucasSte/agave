@@ -29,7 +29,7 @@ use {
 #[cfg(not(any(target_arch = "sbf", target_arch = "bpf")))]
 pub type InstructionTrace<'ix_data> = (
     Vec<InstructionFrame>,
-    Vec<Cow<'ix_data, [InstructionAccount]>>,
+    Vec<Vec<InstructionAccount>>,
     Vec<Cow<'ix_data, [u8]>>,
 );
 
@@ -79,7 +79,7 @@ pub struct TransactionContext<'ix_data> {
     /// Each entry in `deduplication_maps` represents the deduplication map for each instruction.
     deduplication_maps: Vec<Box<[u16]>>,
     /// Each entry in `instruction_accounts` represents the array of accounts for each instruction.
-    instruction_accounts: Vec<Cow<'ix_data, [InstructionAccount]>>,
+    instruction_accounts: Vec<Vec<InstructionAccount>>,
     /// Each entry in `instruction_data` represents the data for instruction at the corresponding
     /// index.
     instruction_data: Vec<Cow<'ix_data, [u8]>>,
@@ -323,8 +323,7 @@ impl<'ix_data> TransactionContext<'ix_data> {
         );
         self.deduplication_maps
             .push(deduplication_map.into_boxed_slice());
-        self.instruction_accounts
-            .push(Cow::Owned(instruction_accounts));
+        self.instruction_accounts.push(instruction_accounts);
         self.instruction_data.push(instruction_data);
         Ok(())
     }
@@ -709,9 +708,8 @@ impl<'ix_data> TransactionContext<'ix_data> {
                     .instruction_accounts
                     .get_mut(ix_idx)
                     .ok_or(InstructionError::InvalidArgument)?;
-                ix.to_mut()
-                    .resize(new_len as usize, InstructionAccount::new(0, false, false));
-                MemoryRegion::new(&raw mut ix.to_mut()[..], address)
+                ix.resize(new_len as usize, InstructionAccount::new(0, false, false));
+                MemoryRegion::new(&raw mut ix[..], address)
             }
             _ => {
                 // FIXME(nagisa): this is a forward-compatibility hazard.

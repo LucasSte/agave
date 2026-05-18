@@ -8111,7 +8111,7 @@ mod tests {
         invoke_context
             .memory_contexts
             .mock_set_mapping_abi_v2(unsafe {
-                MemoryMapping::new(regions, &config, SBPFVersion::V3).unwrap()
+                MemoryMapping::new(regions, &config, SBPFVersion::V4).unwrap()
             });
         for base in (1..MAXIMUM_VALID_ADDRESS).step_by(GUEST_REGION_SIZE as usize) {
             let err =
@@ -8130,7 +8130,7 @@ mod tests {
         for region in &mut regions {
             region.writable = true;
         }
-        let mapping = unsafe { MemoryMapping::new(regions, &config, SBPFVersion::V3).unwrap() };
+        let mapping = unsafe { MemoryMapping::new(regions, &config, SBPFVersion::V4).unwrap() };
         invoke_context
             .memory_contexts
             .mock_set_mapping_abi_v2(mapping);
@@ -8156,7 +8156,7 @@ mod tests {
         for (idx, region) in regions.clone().into_iter().enumerate() {
             regions[idx].writable = false;
             let mapping =
-                unsafe { MemoryMapping::new(regions.clone(), &config, SBPFVersion::V3).unwrap() };
+                unsafe { MemoryMapping::new(regions.clone(), &config, SBPFVersion::V4).unwrap() };
             invoke_context
                 .memory_contexts
                 .mock_set_mapping_abi_v2(mapping);
