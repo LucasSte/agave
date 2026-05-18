@@ -157,13 +157,14 @@ impl MemoryContexts {
     ) -> Result<(), InstructionError> {
         let current_instruction = transaction_context.get_current_instruction_context()?;
 
-        let accounts_index = (GUEST_ACCOUNT_PAYLOAD_BASE_ADDRESS >> 32) as usize;
+        let accounts_index = abiv2_region_index_from_vm_address(GUEST_ACCOUNT_PAYLOAD_BASE_ADDRESS);
         let range = accounts_index..accounts_index.saturating_add(MAX_ACCOUNTS_PER_TRANSACTION);
         let account_regions = self
             .abiv2_mappings
             .get_regions_mut()
             .get_mut(range)
             .expect("Account regions should have been configured.");
+
         for account in current_instruction.instruction_accounts() {
             let acc_region = account_regions
                 .get_mut(account.index_in_transaction as usize)
