@@ -38,7 +38,7 @@ impl VmExposable for AccountSharedFields {}
 pub(crate) struct AccountPrivateFields {
     rent_epoch: u64,
     executable: bool,
-    pub(crate) payload: Arc<Vec<u8>>,
+    payload: Arc<Vec<u8>>,
 }
 
 #[cfg(not(any(target_arch = "bpf", target_arch = "sbf")))]
@@ -245,8 +245,8 @@ pub(crate) type DeconstructedTransactionAccounts =
 #[derive(Debug)]
 #[cfg(not(any(target_arch = "bpf", target_arch = "sbf")))]
 pub struct TransactionAccounts {
-    pub(crate) shared_account_fields: Box<[UnsafeCell<AccountSharedFields>]>,
-    pub(crate) private_account_fields: Box<[UnsafeCell<AccountPrivateFields>]>,
+    shared_account_fields: Box<[UnsafeCell<AccountSharedFields>]>,
+    private_account_fields: Box<[UnsafeCell<AccountPrivateFields>]>,
     borrow_counters: Box<[BorrowCounter]>,
     touched_flags: Box<[Cell<bool>]>,
     resize_delta: Cell<i64>,
