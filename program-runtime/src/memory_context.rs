@@ -13,9 +13,10 @@ use {
         transaction::TransactionContext,
         vm_addresses::{
             ACCOUNT_METADATA_AREA, GUEST_ACCOUNT_PAYLOAD_BASE_ADDRESS,
-            GUEST_INSTRUCTION_ACCOUNT_BASE_ADDRESS, GUEST_INSTRUCTION_DATA_BASE_ADDRESS,
-            INSTRUCTION_TRACE_AREA, RETURN_DATA_SCRATCHPAD, TRANSACTION_FRAME_ADDRESS,
-            abiv2_region_index_from_vm_address,
+            GUEST_ACCOUNT_PAYLOAD_END_ADDRESS, GUEST_INSTRUCTION_ACCOUNT_BASE_ADDRESS,
+            GUEST_INSTRUCTION_ACCOUNT_END_ADDRESS, GUEST_INSTRUCTION_DATA_BASE_ADDRESS,
+            GUEST_INSTRUCTION_DATA_END_ADDRESS, INSTRUCTION_TRACE_AREA, RETURN_DATA_SCRATCHPAD,
+            TRANSACTION_FRAME_ADDRESS, abiv2_region_index_from_vm_address,
         },
     },
 };
@@ -262,26 +263,23 @@ pub(crate) fn create_abiv2_regions(transaction_context: &TransactionContext) -> 
         .unwrap() = MemoryRegion::new(return_data_slice, RETURN_DATA_SCRATCHPAD);
 
     // Indexes 8..264: Transaction accounts payload
-    let payload_start_idx = abiv2_region_index_from_vm_address(GUEST_ACCOUNT_PAYLOAD_BASE_ADDRESS);
-    let account_regions = v2_regions
-        .get_mut(payload_start_idx..payload_start_idx.saturating_add(MAX_ACCOUNTS_PER_TRANSACTION))
-        .unwrap();
+    let start_idx = abiv2_region_index_from_vm_address(GUEST_ACCOUNT_PAYLOAD_BASE_ADDRESS);
+    let end_idx = abiv2_region_index_from_vm_address(GUEST_ACCOUNT_PAYLOAD_END_ADDRESS);
+    let regions = v2_regions.get_mut(start_idx..end_idx).unwrap();
     transaction_context
         .accounts()
-        .account_payload_regions(account_regions);
+        .account_payload_regions(regions);
 
     // Indexes 264..328: Instruction data payload area
-    let data_start_idx = abiv2_region_index_from_vm_address(GUEST_INSTRUCTION_DATA_BASE_ADDRESS);
-    let regions = v2_regions
-        .get_mut(data_start_idx..data_start_idx.saturating_add(MAX_INSTRUCTION_TRACE_LENGTH))
-        .unwrap();
+    let start_idx = abiv2_region_index_from_vm_address(GUEST_INSTRUCTION_DATA_BASE_ADDRESS);
+    let end_idx = abiv2_region_index_from_vm_address(GUEST_INSTRUCTION_DATA_END_ADDRESS);
+    let regions = v2_regions.get_mut(start_idx..end_idx).unwrap();
     transaction_context.instruction_payload_regions(regions);
 
     // Indexes 328..392: Instruction accounts area
-    let acc_start_idx = abiv2_region_index_from_vm_address(GUEST_INSTRUCTION_ACCOUNT_BASE_ADDRESS);
-    let regions = v2_regions
-        .get_mut(acc_start_idx..acc_start_idx.saturating_add(MAX_INSTRUCTION_TRACE_LENGTH))
-        .unwrap();
+    let start_idx = abiv2_region_index_from_vm_address(GUEST_INSTRUCTION_ACCOUNT_BASE_ADDRESS);
+    let end_idx = abiv2_region_index_from_vm_address(GUEST_INSTRUCTION_ACCOUNT_END_ADDRESS);
+    let regions = v2_regions.get_mut(start_idx..end_idx).unwrap();
     transaction_context.instruction_accounts_regions(regions);
 
     v2_regions
