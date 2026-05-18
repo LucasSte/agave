@@ -2734,7 +2734,7 @@ declare_builtin_function!(
         let cpi_bytes_per_unit = compute_cost.cpi_bytes_per_unit;
         invoke_context
             .compute_meter
-            .consume_checked(compute_cost.syscall_base_cost)?;
+            .consume_checked(compute_cost.set_buffer_length_base_cost)?;
 
         let memory_mapping = invoke_context.memory_contexts.memory_mapping_mut()?;
         let Some((idx, region)) = memory_mapping.find_region(region_base_address) else {
