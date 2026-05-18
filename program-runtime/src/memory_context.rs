@@ -2,7 +2,7 @@ use {
     crate::invoke_context::BpfAllocator,
     solana_instruction::error::InstructionError,
     solana_sbpf::{
-        ebpf::{MM_BYTECODE_START, MM_RODATA_START},
+        ebpf::{MM_BYTECODE_START, MM_HEAP_START, MM_RODATA_START, MM_STACK_START},
         elf::Executable,
         memory_region::{MemoryMapping, MemoryRegion, default_access_violation_handler},
         program::SBPFVersion,
@@ -218,13 +218,13 @@ pub(crate) fn create_abiv2_regions(transaction_context: &TransactionContext) -> 
     // there are no duplicate regions (for e.g. tests.)
     // Index 0: ELF rodata
     // Index 1: ELF text area (not mapped)
-    // Index 2: heap
-    // Index 3: stack
+    // Index 2: stack
+    // Index 3: heap
     for vm_addr in [
         MM_RODATA_START,
         MM_BYTECODE_START,
-        HEAP_ADDRESS,
-        STACK_ADDRESS,
+        MM_STACK_START,
+        MM_HEAP_START,
     ] {
         v2_regions
             .get_mut(abiv2_region_index_from_vm_address(vm_addr))
