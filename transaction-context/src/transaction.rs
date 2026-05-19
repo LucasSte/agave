@@ -669,17 +669,14 @@ impl<'ix_data> TransactionContext<'ix_data> {
             }
             GUEST_ACCOUNT_PAYLOAD_BASE_ADDRESS..GUEST_ACCOUNT_PAYLOAD_END_ADDRESS => {
                 let accounts = self.accounts();
-                if new_len > MAX_ACCOUNT_DATA_LEN {
-                    return Err(InstructionError::InvalidRealloc);
-                }
                 let account_address = address
                     .checked_sub(GUEST_ACCOUNT_PAYLOAD_BASE_ADDRESS)
                     .ok_or(InstructionError::InvalidArgument)?;
                 let account_index = abiv2_region_index_from_vm_address(account_address) as u16;
                 let mut account = accounts.try_borrow_mut(account_index)?;
-                accounts.touch(account_index)?;
                 let old_length = account.data().len();
                 accounts.can_data_be_resized(old_length, new_len as usize)?;
+                accounts.touch(account_index)?;
                 accounts.update_accounts_resize_delta(old_length, new_len as usize)?;
                 account.resize(new_len as usize, 0);
                 MemoryRegion::new(account.raw_mut_data_slice(), address)
