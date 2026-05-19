@@ -14,6 +14,8 @@ pub use self::{
 };
 use {
     crate::mem_ops::is_nonoverlapping,
+    solana_account::WritableAccount,
+    solana_big_mod_exp::{BigModExpParams, big_mod_exp},
     solana_blake3_hasher as blake3,
     solana_cpi::MAX_RETURN_DATA,
     solana_hash::Hash,
@@ -45,7 +47,7 @@ use {
     solana_svm_log_collector::{ic_logger_msg, ic_msg},
     solana_svm_type_overrides::sync::Arc,
     solana_sysvar::SysvarSerialize,
-    solana_transaction_context::vm_slice::VmSlice,
+    solana_transaction_context::{IndexOfAccount, vm_slice::VmSlice},
     std::{
         alloc::Layout,
         mem::{MaybeUninit, align_of, size_of},
@@ -2720,6 +2722,40 @@ declare_builtin_function!(
             // operation, early exits out of this function aren't an unsoundness risk at least.
             memory_mapping.replace_region(idx, new_region)?;
         }
+        Ok(0)
+    }
+);
+
+declare_builtin_function!(
+    // Assign account owner for ABIv2
+    SyscallSolAssignOwner,
+    fn rust(
+        invoke_context: &mut InvokeContext<'_, '_>,
+        account_idx: u64,
+        new_owner_ptr: u64,
+        _arg3: u64,
+        _arg4: u64,
+        _arg5: u64,
+    ) -> Result<u64, Error> {
+        let is_check_aligned = invoke_context.get_check_aligned();
+        let translated_key = translate_slice::<u8>(
+            invoke_context.memory_contexts.memory_mapping()?,
+            new_owner_ptr,
+            32,
+            is_check_aligned,
+        )?;
+
+        let instruction_context = invoke_context
+            .transaction_context
+            .get_current_instruction_context()?;
+        let index_in_transaction =
+            u16::try_from(account_idx).map_err(|_| InstructionError::MissingAccount)?;
+        let index_in_instruction =
+            instruction_context.get_index_of_account_in_instruction(index_in_transaction)?;
+        let mut borrowed_account =
+            instruction_context.try_borrow_instruction_account(index_in_instruction)?;
+
+        borrowed_account.set_owner(translated_key)?;
         Ok(0)
     }
 );
