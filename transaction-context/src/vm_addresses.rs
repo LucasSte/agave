@@ -21,8 +21,8 @@ pub const GUEST_INSTRUCTION_ACCOUNT_BASE_ADDRESS: u64 =
 pub const GUEST_INSTRUCTION_ACCOUNT_END_ADDRESS: u64 =
     GUEST_INSTRUCTION_ACCOUNT_BASE_ADDRESS + from_index(MAX_INSTRUCTION_TRACE_LENGTH as u64);
 
-const fn from_index(index: u64) -> u64 {
-    index * GUEST_REGION_SIZE
+pub const fn from_index(index: u64) -> u64 {
+    index.checked_mul(GUEST_REGION_SIZE).unwrap()
 }
 
 pub const fn nonoverlapping_base_address(base_index: u64, previous_address: u64) -> u64 {

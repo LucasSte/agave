@@ -1,4 +1,5 @@
 #![cfg(feature = "agave-unstable-api")]
+
 pub use self::{
     cpi::{SyscallInvokeSignedC, SyscallInvokeSignedRust},
     logging::{
@@ -2725,7 +2726,7 @@ declare_builtin_function!(
     fn rust(
         invoke_context: &mut InvokeContext<'_, '_>,
         region_base_address: u64,
-        new_length: u64,
+        new_len: u64,
         _arg3: u64,
         _arg4: u64,
         _arg5: u64,
@@ -2743,7 +2744,7 @@ declare_builtin_function!(
         if region.vm_addr != region_base_address || !region.writable {
             return Err(SyscallError::InvalidPointer.into());
         }
-        if let Some(_increase_bytes) = new_length.checked_sub(region.len) {
+        if let Some(_increase_bytes) = new_len.checked_sub(region.len) {
             // We have to charge for the entire new_length whenever the syscall increases the size
             // of the buffer. That's because not only do we have to zero out the newly added
             // capacity but also may need to copy data from the old buffer to a new one in case the
@@ -2751,13 +2752,12 @@ declare_builtin_function!(
             //
             // This may change in the future if we end up using something fancier as the backing
             // storage.
-            let cost = new_length.checked_div(cpi_bytes_per_unit).unwrap_or(u64::MAX);
+            let cost = new_len.checked_div(cpi_bytes_per_unit).unwrap_or(u64::MAX);
             invoke_context.compute_meter.consume_checked(cost)?;
         }
-        let new_region = invoke_context.transaction_context.resize_region(
-            region_base_address,
-            new_length
-        )?;
+        let new_region = invoke_context
+            .transaction_context
+            .resize_region(region_base_address, new_len)?;
         unsafe {
             // FIXME(nagisa): RISKY! The above might have realloc'd, but replace_region can
             // still fail, leaving the memory mapping in an entirely invalid and unsound state
@@ -2818,7 +2818,7 @@ mod tests {
         solana_sysvar_id::SysvarId,
         solana_transaction_context::{
             instruction_accounts::InstructionAccount,
-            vm_addresses::{GUEST_REGION_SIZE, MAXIMUM_VALID_ADDRESS},
+            vm_addresses::{GUEST_INSTRUCTION_ACCOUNT_END_ADDRESS, GUEST_REGION_SIZE},
         },
         std::{
             hash::{DefaultHasher, Hash, Hasher},

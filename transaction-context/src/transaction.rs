@@ -1,3 +1,4 @@
+use {crate::vm_slice::VmSlice, solana_pubkey::Pubkey};
 #[cfg(not(any(target_arch = "bpf", target_arch = "sbf")))]
 use {
     crate::{
@@ -7,7 +8,10 @@ use {
         instruction_accounts::InstructionAccount,
         transaction_accounts::{KeyedAccountSharedData, TransactionAccounts},
         vm_addresses::{
-            GUEST_ACCOUNT_PAYLOAD_BASE_ADDRESS, GUEST_ACCOUNT_PAYLOAD_END_ADDRESS, GUEST_INSTRUCTION_ACCOUNT_END_ADDRESS, GUEST_INSTRUCTION_DATA_BASE_ADDRESS, GUEST_INSTRUCTION_DATA_END_ADDRESS, GUEST_REGION_SIZE, RETURN_DATA_SCRATCHPAD, abiv2_region_index_from_vm_address
+            GUEST_ACCOUNT_PAYLOAD_BASE_ADDRESS, GUEST_ACCOUNT_PAYLOAD_END_ADDRESS,
+            GUEST_INSTRUCTION_ACCOUNT_BASE_ADDRESS, GUEST_INSTRUCTION_ACCOUNT_END_ADDRESS,
+            GUEST_INSTRUCTION_DATA_BASE_ADDRESS, GUEST_INSTRUCTION_DATA_END_ADDRESS,
+            GUEST_REGION_SIZE, RETURN_DATA_SCRATCHPAD, abiv2_region_index_from_vm_address,
         },
     },
     solana_account::{AccountSharedData, ReadableAccount, WritableAccount},
@@ -16,10 +20,6 @@ use {
     solana_rent::Rent,
     solana_sbpf::memory_region::{AccessType, AccessViolationHandler, MemoryRegion, VmExposable},
     std::{borrow::Cow, cell::Cell, rc::Rc},
-};
-use {
-    crate::{vm_addresses::GUEST_INSTRUCTION_ACCOUNT_BASE_ADDRESS, vm_slice::VmSlice},
-    solana_pubkey::Pubkey,
 };
 
 /// Used only in fn `take_instruction_trace` for deconstructing TransactionContext
@@ -654,10 +654,10 @@ impl<'ix_data> TransactionContext<'ix_data> {
 
     pub fn resize_region(
         &mut self,
-        address: u64,
+        vm_address: u64,
         new_len: u64,
     ) -> Result<MemoryRegion, InstructionError> {
-        let new_region = match address {
+        let new_region = match vm_address {
             RETURN_DATA_SCRATCHPAD => {
                 self.return_data_bytes.resize(new_len as usize, 0);
                 unsafe {
@@ -665,31 +665,28 @@ impl<'ix_data> TransactionContext<'ix_data> {
                         .return_data_scratchpad
                         .set_len(new_len);
                 }
-                MemoryRegion::new(&raw mut self.return_data_bytes[..], address)
+                MemoryRegion::new(&raw mut self.return_data_bytes[..], vm_address)
             }
             GUEST_ACCOUNT_PAYLOAD_BASE_ADDRESS..GUEST_ACCOUNT_PAYLOAD_END_ADDRESS => {
-                let accounts = self.accounts();
-                let account_address = address
+                let account_address = vm_address
                     .checked_sub(GUEST_ACCOUNT_PAYLOAD_BASE_ADDRESS)
                     .ok_or(InstructionError::InvalidArgument)?;
-                let account_index = abiv2_region_index_from_vm_address(account_address) as u16;
-                let mut account = accounts.try_borrow_mut(account_index)?;
-                let old_length = account.data().len();
-                accounts.can_data_be_resized(old_length, new_len as usize)?;
-                accounts.touch(account_index)?;
-                accounts.update_accounts_resize_delta(old_length, new_len as usize)?;
-                account.resize(new_len as usize, 0);
-                MemoryRegion::new(account.raw_mut_data_slice(), address)
+                let account_index = abiv2_region_index_from_vm_address(account_address);
+                let index_in_transaction =
+                    u16::try_from(account_index).map_err(|_| InstructionError::MissingAccount)?;
+                let insn_ctx = self.get_current_instruction_context()?;
+                let index_in_instruction =
+                    insn_ctx.get_index_of_account_in_instruction(index_in_transaction)?;
+                let mut account = insn_ctx.try_borrow_instruction_account(index_in_instruction)?;
+                account.resize_payload_region(new_len as usize)?
             }
             GUEST_INSTRUCTION_DATA_BASE_ADDRESS..GUEST_INSTRUCTION_DATA_END_ADDRESS => {
-                let ix_address = address
+                let ix_address = vm_address
                     .checked_sub(GUEST_INSTRUCTION_DATA_BASE_ADDRESS)
                     .ok_or(InstructionError::InvalidArgument)?;
                 let ix_idx = abiv2_region_index_from_vm_address(ix_address);
-                let ix = self
-                    .instruction_data
-                    .get_mut(ix_idx)
-                    .ok_or(InstructionError::InvalidArgument)?;
+                let ix = self.instruction_data.get_mut(ix_idx);
+                let ix = ix.ok_or(InstructionError::InvalidArgument)?;
                 let data_vec = match ix {
                     Cow::Owned(vec) => vec,
                     Cow::Borrowed(_) => {
@@ -698,10 +695,10 @@ impl<'ix_data> TransactionContext<'ix_data> {
                     }
                 };
                 data_vec.resize(new_len as usize, 0);
-                MemoryRegion::new(&raw mut data_vec[..], address)
+                MemoryRegion::new(&raw mut data_vec[..], vm_address)
             }
             GUEST_INSTRUCTION_ACCOUNT_BASE_ADDRESS..GUEST_INSTRUCTION_ACCOUNT_END_ADDRESS => {
-                let ix_address = address
+                let ix_address = vm_address
                     .checked_sub(GUEST_INSTRUCTION_ACCOUNT_BASE_ADDRESS)
                     .ok_or(InstructionError::InvalidArgument)?;
                 let ix_idx = abiv2_region_index_from_vm_address(ix_address);
@@ -710,7 +707,7 @@ impl<'ix_data> TransactionContext<'ix_data> {
                     .get_mut(ix_idx)
                     .ok_or(InstructionError::InvalidArgument)?;
                 ix.resize(new_len as usize, InstructionAccount::new(0, false, false));
-                MemoryRegion::new(&raw mut ix[..], address)
+                MemoryRegion::new(&raw mut ix[..], vm_address)
             }
             _ => {
                 // FIXME(nagisa): this is a forward-compatibility hazard.

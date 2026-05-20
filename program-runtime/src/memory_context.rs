@@ -9,7 +9,6 @@ use {
         vm::{Config, ContextObject},
     },
     solana_transaction_context::{
-        MAX_ACCOUNTS_PER_TRANSACTION, MAX_INSTRUCTION_TRACE_LENGTH,
         transaction::TransactionContext,
         vm_addresses::{
             ACCOUNT_METADATA_AREA, GUEST_ACCOUNT_PAYLOAD_BASE_ADDRESS,
@@ -157,13 +156,12 @@ impl MemoryContexts {
         transaction_context: &TransactionContext,
     ) -> Result<(), InstructionError> {
         let current_instruction = transaction_context.get_current_instruction_context()?;
-
-        let accounts_index = abiv2_region_index_from_vm_address(GUEST_ACCOUNT_PAYLOAD_BASE_ADDRESS);
-        let range = accounts_index..accounts_index.saturating_add(MAX_ACCOUNTS_PER_TRANSACTION);
+        let accounts_start = abiv2_region_index_from_vm_address(GUEST_ACCOUNT_PAYLOAD_BASE_ADDRESS);
+        let accounts_end = abiv2_region_index_from_vm_address(GUEST_ACCOUNT_PAYLOAD_END_ADDRESS);
         let account_regions = self
             .abiv2_mappings
             .get_regions_mut()
-            .get_mut(range)
+            .get_mut(accounts_start..accounts_end)
             .expect("Account regions should have been configured.");
 
         for account in current_instruction.instruction_accounts() {
