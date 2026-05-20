@@ -81,6 +81,7 @@ pub struct FeatureSnapshot {
     pub relax_fee_payer_constraint: bool,
     pub remove_inactive_stakes: bool,
     pub loader_v3_set_program_data_to_elf_length: bool,
+    pub program_runtime_abiv2: bool,
 }
 
 impl From<&AHashMap<Pubkey, u64>> for FeatureSnapshot {
@@ -183,6 +184,7 @@ impl From<&AHashMap<Pubkey, u64>> for FeatureSnapshot {
             loader_v3_set_program_data_to_elf_length: is_active(
                 &loader_v3_set_program_data_to_elf_length::ID,
             ),
+            program_runtime_abiv2: is_active(&program_runtime_abiv2::ID),
         }
     }
 }
@@ -344,6 +346,7 @@ impl FeatureSet {
             relax_fee_payer_constraint: snapshot.relax_fee_payer_constraint,
             loader_v3_set_program_data_to_elf_length: snapshot
                 .loader_v3_set_program_data_to_elf_length,
+            program_runtime_abiv2: snapshot.program_runtime_abiv2,
         }
     }
 }
@@ -1498,6 +1501,9 @@ pub mod set_lamports_per_byte_to_6960 {
 
     pub const LAMPORTS_PER_BYTE: u64 = 6960;
 }
+pub mod program_runtime_abiv2 {
+    solana_pubkey::declare_id!("AB1v2ExperimentaL111111111111111111111111111");
+}
 
 pub mod reduce_slot_time_to_350ms {
     solana_pubkey::declare_id!("iBRL5RuWhw4yqaAZu96RUULHckHTZAoe2b77qaV38JZ");
@@ -2634,6 +2640,10 @@ pub static FEATURE_NAMES: LazyLock<AHashMap<Pubkey, &'static str>> = LazyLock::n
         (
             loader_v3_set_program_data_to_elf_length::id(),
             "SIMD-0433: Loader V3 Set Program Data to ELF Length",
+        ),
+        (
+            program_runtime_abiv2::id(),
+            "SIMD-0177: Program runtime ABIv2",
         ),
         /*************** ADD NEW FEATURES HERE ***************/
         /***** ADD NEW FEATURE BOOL TO `FeatureSnapshot` *****/
