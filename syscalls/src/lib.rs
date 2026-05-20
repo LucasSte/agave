@@ -2794,14 +2794,13 @@ mod tests {
         solana_program::program::check_type_assumptions,
         solana_program_runtime::{
             execution_budget::MAX_HEAP_FRAME_BYTES,
-            invoke_context::{BpfAllocator, Executable, InvokeContext},
+            invoke_context::{BpfAllocator, InvokeContext},
             memory::address_is_aligned,
             memory_context::{MemoryContext, create_abiv2_regions},
             with_mock_invoke_context, with_mock_invoke_context_with_feature_set,
         },
         solana_sbpf::{
             aligned_memory::AlignedMemory,
-            assembler::assemble,
             ebpf::{self, HOST_ALIGN},
             error::EbpfError,
             memory_region::{MemoryMapping, MemoryRegion},
@@ -8104,7 +8103,7 @@ mod tests {
         let config = Config::default();
         prepare_mockup!(invoke_context, program_id, bpf_loader_upgradeable::id());
         invoke_context.memory_contexts.set_abi_v2().unwrap();
-        let mut regions = create_abiv2_regions(&invoke_context.transaction_context);
+        let mut regions = create_abiv2_regions(invoke_context.transaction_context);
         for region in &mut regions {
             region.writable = true;
         }
@@ -8113,7 +8112,7 @@ mod tests {
             .mock_set_mapping_abi_v2(unsafe {
                 MemoryMapping::new(regions, &config, SBPFVersion::V4).unwrap()
             });
-        for base in (1..MAXIMUM_VALID_ADDRESS).step_by(GUEST_REGION_SIZE as usize) {
+        for base in (1..GUEST_INSTRUCTION_ACCOUNT_END_ADDRESS).step_by(GUEST_REGION_SIZE as usize) {
             let err =
                 SyscallSetBufferLength::rust(&mut invoke_context, base, 4096, 0, 0, 0).unwrap_err();
             let err = err.downcast::<SyscallError>().unwrap();
@@ -8126,7 +8125,7 @@ mod tests {
         let config = Config::default();
         prepare_mockup!(invoke_context, program_id, bpf_loader_upgradeable::id());
         invoke_context.memory_contexts.set_abi_v2().unwrap();
-        let mut regions = create_abiv2_regions(&invoke_context.transaction_context);
+        let mut regions = create_abiv2_regions(invoke_context.transaction_context);
         for region in &mut regions {
             region.writable = true;
         }
@@ -8149,7 +8148,7 @@ mod tests {
         let config = Config::default();
         prepare_mockup!(invoke_context, program_id, bpf_loader_upgradeable::id());
         invoke_context.memory_contexts.set_abi_v2().unwrap();
-        let mut regions = create_abiv2_regions(&invoke_context.transaction_context);
+        let mut regions = create_abiv2_regions(invoke_context.transaction_context);
         for region in &mut regions {
             region.writable = true;
         }

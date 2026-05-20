@@ -115,6 +115,12 @@ impl MemoryContexts {
         })];
     }
 
+    #[cfg(feature = "dev-context-only-utils")]
+    pub fn mock_set_mapping_abi_v2(&mut self, memory_mapping: MemoryMapping) {
+        *self.abiv2_mappings = memory_mapping;
+        self.contexts = vec![MemoryContextType::ABIv2];
+    }
+
     pub fn push_placeholder(&mut self) {
         // We are only pushing a placeholder to be configured later
         self.contexts.push(MemoryContextType::Placeholder);
@@ -210,6 +216,7 @@ pub struct SerializedAccountMetadata {
     pub vm_owner_addr: u64,
 }
 
+#[cfg_attr(feature = "dev-context-only-utils", qualifier_attr::qualifiers(pub))]
 pub(crate) fn create_abiv2_regions(transaction_context: &TransactionContext) -> Vec<MemoryRegion> {
     let mut v2_regions: Vec<MemoryRegion> = vec![MemoryRegion::default(); NUMBER_OF_REGIONS];
 

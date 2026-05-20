@@ -33,7 +33,7 @@ fn main() {
             let reader = BufReader::new(file);
             reader.lines().collect::<Result<HashSet<_>, _>>()
         })
-        .unwrap_or(HashSet::new());
+        .unwrap_or_else(|_| HashSet::new());
     let old_num_syscalls = old_syscalls.len();
 
     let mut file = match File::open(&syscalls_rs_path) {
@@ -47,10 +47,9 @@ fn main() {
         Regex::new(r#"(?m)::register\([ \n]*&mut result,[ \n]*"([^"]+)"[, \n]*\)"#).unwrap();
     let feature_gate_syscall_re =
         Regex::new(r#"register_feature_gated_function!\([^"]+"([^"]+)","#).unwrap();
-    let new_num_syscalls = sysc_re
+    let new_syscalls = sysc_re
         .captures_iter(text)
-        .chain(feature_gate_syscall_re.captures_iter(text));
-    let new_syscalls = new_num_syscalls
+        .chain(feature_gate_syscall_re.captures_iter(text))
         .map(|c| c.extract::<1>().1[0].to_string())
         .collect::<HashSet<_>>();
     let new_num_syscalls = new_syscalls.len();

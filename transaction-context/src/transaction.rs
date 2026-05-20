@@ -1543,7 +1543,7 @@ mod tests {
             next_top_level_instruction_index: 0,
             rent: Rent::default(),
             deduplication_maps: vec![],
-            instruction_accounts: vec![acc_1.into_boxed_slice(), acc_2.into_boxed_slice()],
+            instruction_accounts: vec![acc_1, acc_2],
             instruction_data: vec![],
         };
 
