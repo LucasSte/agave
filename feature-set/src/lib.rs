@@ -85,6 +85,7 @@ pub struct FeatureSnapshot {
     pub replace_ata_with_p_ata: bool,
     pub increase_tx_v1_account_lock_limit: bool,
     pub invoke_signed_v2: bool,
+    pub program_runtime_abiv2: bool,
 }
 
 impl From<&AHashMap<Pubkey, u64>> for FeatureSnapshot {
@@ -193,6 +194,7 @@ impl From<&AHashMap<Pubkey, u64>> for FeatureSnapshot {
             replace_ata_with_p_ata: is_active(&replace_ata_with_p_ata::ID),
             increase_tx_v1_account_lock_limit: is_active(&increase_tx_v1_account_lock_limit::ID),
             invoke_signed_v2: is_active(&invoke_signed_v2::ID),
+            program_runtime_abiv2: is_active(&program_runtime_abiv2::ID),
         }
     }
 }
@@ -356,6 +358,7 @@ impl FeatureSet {
             loader_v3_allow_prefunded_programdata: snapshot.loader_v3_allow_prefunded_programdata,
             loader_v3_remove_extend_program: snapshot.loader_v3_remove_extend_program,
             invoke_signed_v2: snapshot.invoke_signed_v2,
+            program_runtime_abiv2: snapshot.program_runtime_abiv2,
         }
     }
 }
@@ -1505,6 +1508,9 @@ pub mod set_lamports_per_byte_to_6960 {
     solana_pubkey::declare_id!("rnt8ZQpz2HYhX3DkYBDGjJS1a36mYq69oXka7JrhEdi");
 
     pub const LAMPORTS_PER_BYTE: u64 = 6960;
+}
+pub mod program_runtime_abiv2 {
+    solana_pubkey::declare_id!("AB1v2ExperimentaL111111111111111111111111111");
 }
 
 pub mod reduce_slot_time_to_350ms {
@@ -2753,6 +2759,10 @@ pub static FEATURE_NAMES: LazyLock<AHashMap<Pubkey, &'static str>> = LazyLock::n
         (
             invoke_signed_v2::id(),
             "SIMD-0670: ABIv1 invoke signed v2 syscall",
+        ),
+        (
+            program_runtime_abiv2::id(),
+            "SIMD-0177: Program runtime ABIv2",
         ),
         /*************** ADD NEW FEATURES HERE ***************/
         /***** ADD NEW FEATURE BOOL TO `FeatureSnapshot` *****/
