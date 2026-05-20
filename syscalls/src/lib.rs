@@ -14,7 +14,6 @@ pub use self::{
 };
 use {
     crate::mem_ops::is_nonoverlapping,
-    solana_account::WritableAccount,
     solana_big_mod_exp::{BigModExpParams, big_mod_exp},
     solana_blake3_hasher as blake3,
     solana_cpi::MAX_RETURN_DATA,
@@ -47,7 +46,7 @@ use {
     solana_svm_log_collector::{ic_logger_msg, ic_msg},
     solana_svm_type_overrides::sync::Arc,
     solana_sysvar::SysvarSerialize,
-    solana_transaction_context::{IndexOfAccount, vm_slice::VmSlice},
+    solana_transaction_context::vm_slice::VmSlice,
     std::{
         alloc::Layout,
         mem::{MaybeUninit, align_of, size_of},
@@ -2737,6 +2736,11 @@ declare_builtin_function!(
         _arg4: u64,
         _arg5: u64,
     ) -> Result<u64, Error> {
+        let compute_units = invoke_context.get_execution_cost().abi_v2_assign_owner;
+        invoke_context
+            .compute_meter
+            .consume_checked(compute_units)?;
+
         let is_check_aligned = invoke_context.get_check_aligned();
         let translated_key = translate_slice::<u8>(
             invoke_context.memory_contexts.memory_mapping()?,
@@ -8056,5 +8060,74 @@ mod tests {
             let err = err.downcast::<SyscallError>().unwrap();
             assert_eq!(SyscallError::InvalidPointer, *err);
         }
+    }
+
+    #[test]
+    fn test_sol_assign_owner() {
+        let program_id = Pubkey::new_unique();
+        let transaction_accounts = vec![
+            (
+                program_id,
+                AccountSharedData::new(0, 2, &Pubkey::new_unique()),
+            ),
+            (
+                Pubkey::new_unique(),
+                AccountSharedData::new(0, 3, &program_id),
+            ),
+        ];
+        with_mock_invoke_context!(invoke_context, transaction_context, 2, transaction_accounts);
+
+        let new_owner = Pubkey::new_unique();
+        let region_zero = MemoryRegion::default();
+        let region = MemoryRegion::new(&raw const new_owner.as_array()[..], (1u64 << 32) as u64);
+        let memory_mapping = unsafe {
+            MemoryMapping::new(
+                vec![region_zero, region],
+                &Config::default(),
+                SBPFVersion::V4,
+            )
+            .unwrap()
+        };
+
+        invoke_context.compute_meter.mock_set_remaining(20);
+
+        invoke_context
+            .transaction_context
+            .configure_top_level_instruction_for_tests(
+                0,
+                vec![
+                    InstructionAccount::new(0, false, false),
+                    InstructionAccount::new(1, false, true),
+                ],
+                Vec::new(),
+            )
+            .unwrap();
+
+        invoke_context.push().unwrap();
+        invoke_context
+            .memory_contexts
+            .mock_set_mapping_abi_v2(memory_mapping);
+
+        // Happy path
+        let result = SyscallSolAssignOwner::rust(&mut invoke_context, 1, 1u64 << 32, 0, 0, 0);
+        assert!(result.is_ok());
+        {
+            let modified_account = invoke_context
+                .transaction_context
+                .accounts()
+                .try_borrow(1)
+                .unwrap();
+            assert_eq!(modified_account.owner(), &new_owner);
+        }
+        assert!(invoke_context.compute_meter.consume_checked(1).is_err());
+
+        // Invalid u16
+        invoke_context.compute_meter.mock_set_remaining(20);
+        let result =
+            SyscallSolAssignOwner::rust(&mut invoke_context, u32::MAX as u64, 1u64 << 32, 0, 0, 0);
+        assert_matches!(
+            result,
+            Result::Err(error) if error.downcast_ref::<InstructionError>().unwrap() == &InstructionError::MissingAccount
+        );
     }
 }
