@@ -4,7 +4,7 @@ use {
     solana_sbpf::{
         ebpf::{MM_BYTECODE_START, MM_HEAP_START, MM_RODATA_START, MM_STACK_START},
         elf::Executable,
-        memory_region::{MemoryMapping, MemoryRegion, default_access_violation_handler},
+        memory_region::{AccessViolationHandler, MemoryMapping, MemoryRegion},
         program::SBPFVersion,
         vm::{Config, ContextObject},
     },
@@ -138,13 +138,14 @@ impl MemoryContexts {
         &mut self,
         regions: Vec<MemoryRegion>,
         executable: &Executable<C>,
+        access_violation_handler: AccessViolationHandler,
     ) {
         *self.abiv2_mappings = unsafe {
             MemoryMapping::new_uninitialized(
                 regions,
                 executable.get_config(),
                 executable.get_sbpf_version(),
-                Box::new(default_access_violation_handler),
+                access_violation_handler,
             )
         };
     }
@@ -174,7 +175,11 @@ impl MemoryContexts {
             let acc_region = account_regions
                 .get_mut(account.index_in_transaction as usize)
                 .expect("Account must exist");
-            acc_region.writable = account.is_writable();
+            if account.is_writable() {
+                acc_region.access_violation_handler_payload = Some(account.index_in_transaction);
+            } else {
+                acc_region.access_violation_handler_payload = None;
+            }
         }
 
         Ok(())
@@ -398,11 +403,26 @@ mod test {
             .get_regions()
             .get(accounts_range.clone())
             .unwrap();
-        assert!(!ix1_regions.first().unwrap().writable);
-        assert!(!ix1_regions.get(1).unwrap().writable);
-        assert!(ix1_regions.get(2).unwrap().writable);
+        assert!(
+            ix1_regions
+                .first()
+                .unwrap()
+                .access_violation_handler_payload
+                .is_none()
+        );
+        assert!(
+            ix1_regions
+                .get(1)
+                .unwrap()
+                .access_violation_handler_payload
+                .is_none()
+        );
+        assert_eq!(
+            ix1_regions.get(2).unwrap().access_violation_handler_payload,
+            Some(2)
+        );
         for account_region in ix1_regions.iter().skip(3) {
-            assert!(!account_region.writable);
+            assert!(account_region.access_violation_handler_payload.is_none());
         }
 
         // IX 2
@@ -416,11 +436,29 @@ mod test {
             .get_regions()
             .get(accounts_range.clone())
             .unwrap();
-        assert!(ix2_regions.first().unwrap().writable);
-        assert!(!ix2_regions.get(1).unwrap().writable);
-        assert!(!ix2_regions.get(2).unwrap().writable);
+        assert_eq!(
+            ix2_regions
+                .first()
+                .unwrap()
+                .access_violation_handler_payload,
+            Some(0)
+        );
+        assert!(
+            ix2_regions
+                .get(1)
+                .unwrap()
+                .access_violation_handler_payload
+                .is_none()
+        );
+        assert!(
+            ix2_regions
+                .get(2)
+                .unwrap()
+                .access_violation_handler_payload
+                .is_none()
+        );
         for account_region in ix2_regions.iter().skip(3) {
-            assert!(!account_region.writable);
+            assert!(account_region.access_violation_handler_payload.is_none());
         }
 
         // IX 3
@@ -434,11 +472,26 @@ mod test {
             .get_regions()
             .get(accounts_range.clone())
             .unwrap();
-        assert!(ix3_regions.first().unwrap().writable);
-        assert!(ix3_regions.get(1).unwrap().writable);
-        assert!(!ix3_regions.get(2).unwrap().writable);
+        assert_eq!(
+            ix3_regions
+                .first()
+                .unwrap()
+                .access_violation_handler_payload,
+            Some(0)
+        );
+        assert_eq!(
+            ix3_regions.get(1).unwrap().access_violation_handler_payload,
+            Some(1)
+        );
+        assert!(
+            ix3_regions
+                .get(2)
+                .unwrap()
+                .access_violation_handler_payload
+                .is_none()
+        );
         for account_region in ix3_regions.iter().skip(3) {
-            assert!(!account_region.writable);
+            assert!(account_region.access_violation_handler_payload.is_none());
         }
     }
 }

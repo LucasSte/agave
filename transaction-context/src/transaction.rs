@@ -498,7 +498,47 @@ impl<'ix_data> TransactionContext<'ix_data> {
         Ok(())
     }
 
-    /// Returns a new account data write access handler
+    pub fn abi_v2_access_violation_handler(&self) -> AccessViolationHandler {
+        let accounts = Rc::clone(&self.accounts);
+        Box::new(
+            move |region: &mut MemoryRegion,
+                  _address_space_reserved_for_account: u64,
+                  access_type: AccessType,
+                  _vm_addr: u64,
+                  _len: u64| {
+                if access_type == AccessType::Load {
+                    return;
+                }
+
+                let Some(index_in_transaction) = region.access_violation_handler_payload else {
+                    // This region is not a writable account.
+                    return;
+                };
+
+                if region.writable {
+                    // The region has already been made writable
+                    return;
+                }
+
+                // The call below can't really fail. If they fail because of a bug,
+                // whatever is writing will trigger an EbpfError::AccessViolation like
+                // if the region was readonly, and the transaction will fail gracefully.
+                let Ok(mut account) = accounts.try_borrow_mut(index_in_transaction) else {
+                    debug_assert!(false);
+                    return;
+                };
+
+                // Only copy the account when the access is a store, otherwise no need to copy.
+                *region = MemoryRegion::new(
+                    &raw mut account.data_as_mut_slice()[..],
+                    account.guest_pointer(),
+                );
+                region.access_violation_handler_payload = Some(index_in_transaction);
+            },
+        )
+    }
+
+    /// Returns a new account data write access handler for ABIv1
     pub fn access_violation_handler(
         &self,
         virtual_address_space_adjustments: bool,
