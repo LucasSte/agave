@@ -232,7 +232,8 @@ pub fn execute<'a, 'b: 'a>(
     let pass_input_metadata_in_vm_r3_r5 = invoke_context.get_feature_set()
         .pass_input_metadata_in_vm_r3_r5;
 
-    let is_abi_v2 = executable.get_sbpf_version() == SBPFVersion::V4;
+    let is_abi_v2 = executable.get_sbpf_version() == SBPFVersion::V4
+        && invoke_context.get_feature_set().program_runtime_abiv2;
 
     let mut abiv1_parameters = if is_abi_v2 {
         initialize_abi_v2_areas(invoke_context, executable)?;
