@@ -1,3 +1,5 @@
+#![allow(unsafe_op_in_unsafe_fn)]
+
 use {
     core::{alloc::Layout, ptr::null_mut, slice},
     solana_transaction_context::{
@@ -15,6 +17,14 @@ fn sol_log(message: &[u8]) {
     unsafe {
         let syscall: extern "C" fn(*const u8, u64) = core::mem::transmute(544561597u64); // murmur32 hash of "sol_log_"
         syscall(message.as_ptr(), message.len() as u64)
+    }
+}
+
+fn set_buffer_length(base_address: u64, new_length: u64) -> u64 {
+    unsafe {
+        let syscall: extern "C" fn(u64, u64, u64, u64, u64) -> u64 =
+            core::mem::transmute(0x713026f5u64);
+        syscall(base_address as u64, new_length, 0, 0, 0)
     }
 }
 
@@ -146,7 +156,7 @@ unsafe fn test_valid_accesses(
         assert_eq!(acc_2.lamports, 90123);
         assert_eq!(acc_2.key.to_bytes(), acc_2.payload.deref());
 
-        assert_eq!(current_ix.instruction_data.deref(), b"IX1");
+        assert_eq!(current_ix.instruction_data.deref(), b"\x02");
     } else if tx_frame.current_executing_instruction == 1 {
         let ix_accounts = current_ix.instruction_accounts.deref();
         assert_eq!(ix_accounts.len(), 2);
@@ -168,7 +178,7 @@ unsafe fn test_valid_accesses(
         assert_eq!(acc_2.lamports, 9123);
         assert_eq!(acc_2.owner, acc_1.key);
 
-        assert_eq!(current_ix.instruction_data.deref(), b"IX2");
+        assert_eq!(current_ix.instruction_data.deref(), b"\x03");
     } else {
         panic!("Not expecting more than two instructions.")
     }
@@ -199,7 +209,27 @@ unsafe fn write_to_account(
     *account_data.get_unchecked_mut(2) = 9;
 }
 
-fn test_valid_resizes() {
+unsafe fn test_set_buffer_length_return_scratchpad(write_just_outside: bool) {
+    set_buffer_length(0x7_0000_0000u64, 128);
+    for i in 0..128 {
+        assert_eq!(std::ptr::read((0x7_0000_0000u64 + i) as *const u8), 0);
+    }
+    let write_offset = if write_just_outside { 128 } else { 127 };
+    std::ptr::write((0x7_0000_0000u64 + write_offset) as *mut u8, 42);
+    set_buffer_length(0x7_0000_0000, 256);
+    assert_eq!(std::ptr::read((0x7_0000_0000u64 + 127) as *const u8), 42);
+    for i in 128..256 {
+        assert_eq!(std::ptr::read((0x7_0000_0000u64 + i) as *const u8), 0);
+    }
+}
+
+unsafe fn test_set_buffer_length_account(account_addr: u64) {
+    // caller has initial account buffers at 3 bytes long.
+    let account_data = core::slice::from_raw_parts(account_addr as *const u8, 3);
+    let initial_data = [account_data[0], account_data[1], account_data[2]];
+    set_buffer_length(account_addr, 6);
+    let account_data = core::slice::from_raw_parts(account_addr as *const u8, 6);
+    assert_eq!(account_data, [initial_data[0], initial_data[1], initial_data[2], 0, 0, 0]);
 }
 
 #[unsafe(no_mangle)]
@@ -233,12 +263,11 @@ pub unsafe extern "C" fn entrypoint() -> u64 {
         [0x02, ..] | [0x03, ..] => {
             test_valid_accesses(tx_frame, tx_accounts_metadata);
         }
-        [0x04, ..] | [0x05, ..] => {
-            test_valid_resizes();
-        }
-        _ => panic!("unknown command")
+        [b @ 0x04, ..] | [b @ 0x05, ..] => test_set_buffer_length_return_scratchpad(*b == 0x05),
+        [0x06, ..] => test_set_buffer_length_account(0x9_0000_0000),
+        [0x07, ..] => test_set_buffer_length_account(0xb_0000_0000),
+        [0x08, ..] => test_set_buffer_length_account(0xa_0000_0000),
+        _ => panic!("unknown command"),
     }
     0
 }
-
-
