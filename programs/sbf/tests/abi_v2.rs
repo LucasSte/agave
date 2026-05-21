@@ -352,3 +352,89 @@ fn account_permissions_update() {
     let second_ix = logs.last().unwrap();
     assert!(second_ix.contains("Access violation"));
 }
+
+// #[test]
+// fn account_buffer_resize_test() {
+//     let GenesisConfigInfo {
+//         genesis_config,
+//         mint_keypair,
+//         ..
+//     } = create_genesis_config(50);
+//
+//     let (bank, bank_forks) = Bank::new_with_bank_forks_for_tests(&genesis_config);
+//     let mut bank_client = BankClient::new_shared(bank.clone());
+//     let authority_keypair = Keypair::new();
+//
+//     let (_bank, program_id_1) = load_upgradeable_program_and_advance_slot(
+//         &mut bank_client,
+//         &bank_forks,
+//         &mint_keypair,
+//         &authority_keypair,
+//         "solana_sbf_rust_abi_v2_memory",
+//     );
+//
+//     let (bank, program_id_2) = load_upgradeable_program_and_advance_slot(
+//         &mut bank_client,
+//         &bank_forks,
+//         &mint_keypair,
+//         &authority_keypair,
+//         "solana_sbf_rust_abi_v2_memory",
+//     );
+//
+//     let acc_1_keypair = Keypair::new();
+//     let acc_1 = AccountSharedData::create_from_existing_shared_data(
+//         223450,
+//         vec![1, 2, 3].into(),
+//         system_program::id(),
+//         false,
+//         64,
+//     );
+//     bank.store_account(&acc_1_keypair.pubkey(), &acc_1);
+//     let acc_2_keypair = Keypair::new();
+//     let acc_2 = AccountSharedData::create_from_existing_shared_data(
+//         35,
+//         vec![3, 4, 5].into(),
+//         system_program::id(),
+//         false,
+//         64,
+//     );
+//     bank.store_account(&acc_2_keypair.pubkey(), &acc_2);
+//     let acc_3_key = Pubkey::new_unique();
+//     let acc_3 = AccountSharedData::create_from_existing_shared_data(
+//         9123,
+//         vec![6, 7, 8].into(),
+//         acc_2_keypair.pubkey(),
+//         false,
+//         64,
+//     );
+//     bank.store_account(&acc_3_key, &acc_3);
+//     let acc_4_key = Pubkey::new_unique();
+//     let acc_4 = AccountSharedData::create_from_existing_shared_data(
+//         90123,
+//         Arc::new(acc_4_key.to_bytes().to_vec()),
+//         acc_2_keypair.pubkey(),
+//         false,
+//         64,
+//     );
+//     bank.store_account(&acc_4_key, &acc_4);
+//
+//     let metas_for_ix_1 = vec![
+//         AccountMeta::new(acc_1_keypair.pubkey(), true),
+//         AccountMeta::new_readonly(acc_4_key, false),
+//     ];
+//     let ix_1 = Instruction::new_with_bytes(program_id_1, b"\x04\x00", metas_for_ix_1);
+//
+//     let metas_for_ix_2 = vec![
+//         AccountMeta::new_readonly(acc_2_keypair.pubkey(), true),
+//         AccountMeta::new(acc_3_key, false),
+//     ];
+//     let ix_2 = Instruction::new_with_bytes(program_id_2, b"\x05\0x01", metas_for_ix_2);
+//
+//     let message = Message::new(&[ix_1, ix_2], Some(&mint_keypair.pubkey()));
+//     let bank_client = BankClient::new_shared(bank.clone());
+//
+//     let result = bank_client
+//         .send_and_confirm_message(&[&mint_keypair, &acc_1_keypair, &acc_2_keypair], message);
+//     std::println!("result: {:?}", result);
+//     assert!(result.is_ok());
+// }

@@ -199,6 +199,9 @@ unsafe fn write_to_account(
     *account_data.get_unchecked_mut(2) = 9;
 }
 
+fn test_valid_resizes() {
+}
+
 #[unsafe(no_mangle)]
 #[allow(clippy::missing_safety_doc)]
 pub unsafe extern "C" fn entrypoint() -> u64 {
@@ -218,17 +221,24 @@ pub unsafe extern "C" fn entrypoint() -> u64 {
     let current_ix = instruction_trace
         .get(tx_frame.current_executing_instruction as usize)
         .unwrap();
-    if current_ix.instruction_data.deref() == b"IX1"
-        || current_ix.instruction_data.deref() == b"IX2"
-    {
-        test_valid_accesses(tx_frame, tx_accounts_metadata);
-    } else if *current_ix.instruction_data.deref().get_unchecked(0) == 0 {
-        let mes = format!("tx accs: {}", tx_frame.number_of_transaction_accounts);
-        sol_log(mes.as_bytes());
-        read_invalid_regions(current_ix);
-    } else if *current_ix.instruction_data.deref().get_unchecked(0) == 1 {
-        write_to_account(current_ix, tx_accounts_metadata);
+    match current_ix.instruction_data.deref() {
+        [0x00, ..] => {
+            let mes = format!("tx accs: {}", tx_frame.number_of_transaction_accounts);
+            sol_log(mes.as_bytes());
+            read_invalid_regions(current_ix);
+        }
+        [0x01, ..] => {
+            write_to_account(current_ix, tx_accounts_metadata);
+        }
+        [0x02, ..] | [0x03, ..] => {
+            test_valid_accesses(tx_frame, tx_accounts_metadata);
+        }
+        [0x04, ..] | [0x05, ..] => {
+            test_valid_resizes();
+        }
+        _ => panic!("unknown command")
     }
-
     0
 }
+
+
