@@ -46,7 +46,10 @@ use {
     solana_svm_log_collector::{ic_logger_msg, ic_msg},
     solana_svm_type_overrides::sync::Arc,
     solana_sysvar::SysvarSerialize,
-    solana_transaction_context::vm_slice::VmSlice,
+    solana_transaction_context::{
+        vm_addresses::{GUEST_ACCOUNT_PAYLOAD_BASE_ADDRESS, abiv2_region_index_from_vm_address},
+        vm_slice::VmSlice,
+    },
     std::{
         alloc::Layout,
         mem::{MaybeUninit, align_of, size_of},
@@ -2730,7 +2733,7 @@ declare_builtin_function!(
     SyscallSolAssignOwner,
     fn rust(
         invoke_context: &mut InvokeContext<'_, '_>,
-        account_idx: u64,
+        account_idx_in_tx: u64,
         new_owner_ptr: u64,
         _arg3: u64,
         _arg4: u64,
@@ -2753,13 +2756,33 @@ declare_builtin_function!(
             .transaction_context
             .get_current_instruction_context()?;
         let index_in_transaction =
-            u16::try_from(account_idx).map_err(|_| InstructionError::MissingAccount)?;
+            u16::try_from(account_idx_in_tx).map_err(|_| InstructionError::MissingAccount)?;
         let index_in_instruction =
             instruction_context.get_index_of_account_in_instruction(index_in_transaction)?;
         let mut borrowed_account =
             instruction_context.try_borrow_instruction_account(index_in_instruction)?;
 
+        let old_owner = borrowed_account.get_owner();
         borrowed_account.set_owner(translated_key)?;
+
+        // Changing the owner makes the account readonly.
+        if old_owner.as_ref() != translated_key {
+            let account_region_index =
+                abiv2_region_index_from_vm_address(GUEST_ACCOUNT_PAYLOAD_BASE_ADDRESS)
+                    .saturating_add(account_idx_in_tx as usize);
+            let memory_mapping = invoke_context.memory_contexts.memory_mapping_mut()?;
+            let mut region = memory_mapping
+                .get_regions()
+                .get(account_region_index)
+                .ok_or(InstructionError::MissingAccount)?
+                .clone();
+            region.writable = false;
+            region.access_violation_handler_payload = None;
+            unsafe {
+                memory_mapping.replace_region(account_region_index, region)?;
+            }
+        }
+
         Ok(0)
     }
 );
