@@ -175,10 +175,18 @@ impl MemoryContexts {
             let acc_region = account_regions
                 .get_mut(account.index_in_transaction as usize)
                 .expect("Account must exist");
-            if account.is_writable() {
-                acc_region.access_violation_handler_payload = Some(account.index_in_transaction);
-            } else {
+
+            if account.is_writable() && !acc_region.writable {
+                if acc_region.access_violation_handler_payload == Some(u16::MAX) {
+                    // In this case, the underlying account payload array has already been updated.
+                    acc_region.writable = true;
+                } else {
+                    acc_region.access_violation_handler_payload =
+                        Some(account.index_in_transaction);
+                }
+            } else if !account.is_writable() {
                 acc_region.access_violation_handler_payload = None;
+                acc_region.writable = false;
             }
         }
 
@@ -403,24 +411,16 @@ mod test {
             .get_regions()
             .get(accounts_range.clone())
             .unwrap();
-        assert!(
-            ix1_regions
-                .first()
-                .unwrap()
-                .access_violation_handler_payload
-                .is_none()
-        );
-        assert!(
-            ix1_regions
-                .get(1)
-                .unwrap()
-                .access_violation_handler_payload
-                .is_none()
-        );
-        assert_eq!(
-            ix1_regions.get(2).unwrap().access_violation_handler_payload,
-            Some(2)
-        );
+
+        let reg_zero = ix1_regions.first().unwrap();
+        assert!(reg_zero.access_violation_handler_payload.is_none());
+        assert!(!reg_zero.writable);
+        let reg_one = ix1_regions.get(1).unwrap();
+        assert!(reg_one.access_violation_handler_payload.is_none());
+        assert!(!reg_one.writable);
+        let reg_two = ix1_regions.get(2).unwrap();
+        assert_eq!(reg_two.access_violation_handler_payload, Some(2));
+        assert!(!reg_two.writable);
         for account_region in ix1_regions.iter().skip(3) {
             assert!(account_region.access_violation_handler_payload.is_none());
         }
@@ -436,27 +436,16 @@ mod test {
             .get_regions()
             .get(accounts_range.clone())
             .unwrap();
-        assert_eq!(
-            ix2_regions
-                .first()
-                .unwrap()
-                .access_violation_handler_payload,
-            Some(0)
-        );
-        assert!(
-            ix2_regions
-                .get(1)
-                .unwrap()
-                .access_violation_handler_payload
-                .is_none()
-        );
-        assert!(
-            ix2_regions
-                .get(2)
-                .unwrap()
-                .access_violation_handler_payload
-                .is_none()
-        );
+
+        let reg_zero = ix2_regions.first().unwrap();
+        assert_eq!(reg_zero.access_violation_handler_payload, Some(0));
+        assert!(!reg_zero.writable);
+        let reg_one = ix2_regions.get(1).unwrap();
+        assert!(reg_one.access_violation_handler_payload.is_none());
+        assert!(!reg_one.writable);
+        let reg_two = ix2_regions.get(2).unwrap();
+        assert!(reg_two.access_violation_handler_payload.is_none());
+        assert!(!reg_two.writable);
         for account_region in ix2_regions.iter().skip(3) {
             assert!(account_region.access_violation_handler_payload.is_none());
         }
@@ -472,24 +461,48 @@ mod test {
             .get_regions()
             .get(accounts_range.clone())
             .unwrap();
-        assert_eq!(
-            ix3_regions
-                .first()
-                .unwrap()
-                .access_violation_handler_payload,
-            Some(0)
-        );
-        assert_eq!(
-            ix3_regions.get(1).unwrap().access_violation_handler_payload,
-            Some(1)
-        );
-        assert!(
-            ix3_regions
-                .get(2)
-                .unwrap()
-                .access_violation_handler_payload
-                .is_none()
-        );
+        let reg_zero = ix3_regions.first().unwrap();
+        assert_eq!(reg_zero.access_violation_handler_payload, Some(0));
+        assert!(!reg_zero.writable);
+        let reg_one = ix3_regions.get(1).unwrap();
+        assert_eq!(reg_one.access_violation_handler_payload, Some(1));
+        assert!(!reg_one.writable);
+        let reg_two = ix3_regions.get(2).unwrap();
+        assert!(reg_two.access_violation_handler_payload.is_none());
+        assert!(!reg_two.writable);
+        for account_region in ix3_regions.iter().skip(3) {
+            assert!(account_region.access_violation_handler_payload.is_none());
+        }
+
+        // Re-tests IX3, but with the first region with u16::MAX as payload
+        let regions = memory_contexts
+            .abiv2_mappings
+            .get_regions_mut()
+            .get_mut(accounts_range.clone())
+            .unwrap();
+        regions
+            .first_mut()
+            .unwrap()
+            .access_violation_handler_payload = Some(u16::MAX);
+
+        memory_contexts
+            .update_abi_v2_account_permissions(&tx_context)
+            .unwrap();
+
+        let ix3_regions = memory_contexts
+            .abiv2_mappings
+            .get_regions()
+            .get(accounts_range.clone())
+            .unwrap();
+        let reg_zero = ix3_regions.first().unwrap();
+        assert_eq!(reg_zero.access_violation_handler_payload, Some(u16::MAX));
+        assert!(reg_zero.writable);
+        let reg_one = ix3_regions.get(1).unwrap();
+        assert_eq!(reg_one.access_violation_handler_payload, Some(1));
+        assert!(!reg_one.writable);
+        let reg_two = ix3_regions.get(2).unwrap();
+        assert!(reg_two.access_violation_handler_payload.is_none());
+        assert!(!reg_two.writable);
         for account_region in ix3_regions.iter().skip(3) {
             assert!(account_region.access_violation_handler_payload.is_none());
         }

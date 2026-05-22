@@ -510,13 +510,19 @@ impl<'ix_data> TransactionContext<'ix_data> {
                     return;
                 }
 
+                if region.writable {
+                    // The region has already been made writable
+                    return;
+                }
+
                 let Some(index_in_transaction) = region.access_violation_handler_payload else {
                     // This region is not a writable account.
                     return;
                 };
 
-                if region.writable {
-                    // The region has already been made writable
+                if index_in_transaction == u16::MAX {
+                    region.writable = true;
+                    // The region has already been created with a mutable array
                     return;
                 }
 
@@ -533,7 +539,7 @@ impl<'ix_data> TransactionContext<'ix_data> {
                     &raw mut account.data_as_mut_slice()[..],
                     account.guest_pointer(),
                 );
-                region.access_violation_handler_payload = Some(index_in_transaction);
+                region.access_violation_handler_payload = Some(u16::MAX);
             },
         )
     }
@@ -807,7 +813,7 @@ impl From<TransactionContext<'_>> for ExecutionRecord {
 
 #[cfg(all(test, not(target_arch = "sbf"), not(target_arch = "bpf")))]
 mod tests {
-    use super::*;
+    use {super::*, std::sync::Arc};
 
     #[test]
     fn test_instructions_sysvar_store_index_checked() {
@@ -1628,5 +1634,66 @@ mod tests {
                 .saturating_add(GUEST_REGION_SIZE.saturating_mul(3u64))
         );
         assert_eq!(r4.len, 0);
+    }
+
+    #[test]
+    fn test_abi_v2_access_violation_handler() {
+        let accounts = vec![
+            (
+                Pubkey::new_unique(),
+                AccountSharedData::create_from_existing_shared_data(
+                    40,
+                    Arc::new(vec![1, 2]),
+                    Pubkey::new_unique(),
+                    false,
+                    2,
+                ),
+            ),
+            (
+                Pubkey::new_unique(),
+                AccountSharedData::create_from_existing_shared_data(
+                    20,
+                    Arc::new(vec![3, 4]),
+                    Pubkey::new_unique(),
+                    false,
+                    2,
+                ),
+            ),
+        ];
+
+        let tx_context = TransactionContext::new(accounts, Rent::default(), 4, 4, 2);
+
+        let data = [0u8; 8];
+        let mut region = MemoryRegion::new(&raw const data[..], 0x80);
+        let handler = tx_context.abi_v2_access_violation_handler();
+
+        handler(&mut region, 0, AccessType::Load, 0, 0);
+        assert!(!region.writable);
+        assert_eq!(region.host_addr, data.as_ptr() as u64);
+
+        region.writable = true;
+        handler(&mut region, 0, AccessType::Store, 0, 0);
+        assert!(region.writable);
+        assert_eq!(region.host_addr, data.as_ptr() as u64);
+
+        region.writable = false;
+        handler(&mut region, 0, AccessType::Store, 0, 0);
+        assert!(!region.writable);
+        assert_eq!(region.host_addr, data.as_ptr() as u64);
+
+        region.access_violation_handler_payload = Some(u16::MAX);
+        handler(&mut region, 0, AccessType::Store, 0, 0);
+        assert!(region.writable);
+        assert_eq!(region.host_addr, data.as_ptr() as u64);
+
+        region.access_violation_handler_payload = Some(1);
+        region.writable = false;
+        handler(&mut region, 0, AccessType::Store, 0, 0);
+        assert!(region.writable);
+        assert_eq!(region.access_violation_handler_payload, Some(u16::MAX));
+        assert_eq!(
+            region.host_addr,
+            tx_context.accounts.try_borrow(1).unwrap().data().as_ptr() as u64
+        );
     }
 }
