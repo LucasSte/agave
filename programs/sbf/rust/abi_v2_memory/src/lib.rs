@@ -223,13 +223,18 @@ unsafe fn test_set_buffer_length_return_scratchpad(write_just_outside: bool) {
     }
 }
 
-unsafe fn test_set_buffer_length_account(account_addr: u64) {
-    // caller has initial account buffers at 3 bytes long.
-    let account_data = core::slice::from_raw_parts(account_addr as *const u8, 3);
-    let initial_data = [account_data[0], account_data[1], account_data[2]];
-    set_buffer_length(account_addr, 6);
-    let account_data = core::slice::from_raw_parts(account_addr as *const u8, 6);
-    assert_eq!(account_data, [initial_data[0], initial_data[1], initial_data[2], 0, 0, 0]);
+unsafe fn test_set_buffer_length_account(
+    account_idx: u64,
+    account_metadata: &[AccountSharedFields],
+) {
+    let meta = &account_metadata[account_idx as usize];
+    assert_eq!(meta.payload.len(), 3);
+    let mut expected_data = [0; 6];
+    expected_data[..3].copy_from_slice(meta.payload.deref());
+    set_buffer_length(meta.payload.ptr(), 6);
+    assert_eq!(meta.payload.len(), 6);
+    let account_data = core::slice::from_raw_parts(meta.payload.ptr() as *const u8, 6);
+    assert_eq!(account_data, expected_data);
 }
 
 #[unsafe(no_mangle)]
@@ -264,9 +269,9 @@ pub unsafe extern "C" fn entrypoint() -> u64 {
             test_valid_accesses(tx_frame, tx_accounts_metadata);
         }
         [b @ 0x04, ..] | [b @ 0x05, ..] => test_set_buffer_length_return_scratchpad(*b == 0x05),
-        [0x06, ..] => test_set_buffer_length_account(0x9_0000_0000),
-        [0x07, ..] => test_set_buffer_length_account(0xb_0000_0000),
-        [0x08, ..] => test_set_buffer_length_account(0xa_0000_0000),
+        [0x06, ..] => test_set_buffer_length_account(1, tx_accounts_metadata),
+        [0x07, ..] => test_set_buffer_length_account(3, tx_accounts_metadata),
+        [0x08, ..] => test_set_buffer_length_account(2, tx_accounts_metadata),
         _ => panic!("unknown command"),
     }
     0
