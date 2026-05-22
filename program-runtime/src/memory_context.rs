@@ -171,12 +171,19 @@ impl MemoryContexts {
             .get_mut(accounts_start..accounts_end)
             .expect("Account regions should have been configured.");
 
-        for account in current_instruction.instruction_accounts() {
+        for (idx_in_ix, account) in current_instruction
+            .instruction_accounts()
+            .iter()
+            .enumerate()
+        {
             let acc_region = account_regions
                 .get_mut(account.index_in_transaction as usize)
                 .expect("Account must exist");
 
-            if account.is_writable() && !acc_region.writable {
+            let borrowed_account =
+                current_instruction.try_borrow_instruction_account(idx_in_ix as u16)?;
+
+            if borrowed_account.can_data_be_changed().is_ok() && !acc_region.writable {
                 if acc_region.access_violation_handler_payload == Some(u16::MAX) {
                     // In this case, the underlying account payload array has already been updated.
                     acc_region.writable = true;
@@ -324,18 +331,23 @@ mod test {
 
     #[test]
     fn test_update_account_permissions() {
+        let program = Pubkey::new_unique();
         let accounts = vec![
             (
                 Pubkey::new_unique(),
-                AccountSharedData::new(20, 10, &Pubkey::new_unique()),
+                AccountSharedData::new(20, 10, &program),
             ),
             (
                 Pubkey::new_unique(),
-                AccountSharedData::new(30, 15, &Pubkey::new_unique()),
+                AccountSharedData::new(30, 15, &program),
             ),
             (
                 Pubkey::new_unique(),
-                AccountSharedData::new(40, 5, &Pubkey::new_unique()),
+                AccountSharedData::new(40, 5, &program),
+            ),
+            (
+                program.clone(),
+                AccountSharedData::new(20, 3, &Pubkey::new_unique()),
             ),
         ];
 
@@ -344,7 +356,7 @@ mod test {
         tx_context
             .configure_instruction_at_index(
                 0,
-                0,
+                3,
                 vec![
                     InstructionAccount::new(0, false, false),
                     InstructionAccount::new(2, false, true),
@@ -358,8 +370,8 @@ mod test {
 
         tx_context
             .configure_instruction_at_index(
-                0,
-                0,
+                1,
+                3,
                 vec![
                     InstructionAccount::new(1, false, false),
                     InstructionAccount::new(2, false, false),
@@ -373,8 +385,8 @@ mod test {
 
         tx_context
             .configure_instruction_at_index(
-                0,
-                0,
+                2,
+                3,
                 vec![
                     InstructionAccount::new(0, false, true),
                     InstructionAccount::new(1, false, true),

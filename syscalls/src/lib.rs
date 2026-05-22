@@ -45,7 +45,10 @@ use {
     solana_svm_log_collector::{ic_logger_msg, ic_msg},
     solana_svm_type_overrides::sync::Arc,
     solana_sysvar::SysvarSerialize,
-    solana_transaction_context::vm_slice::VmSlice,
+    solana_transaction_context::{
+        vm_addresses::{GUEST_ACCOUNT_PAYLOAD_BASE_ADDRESS, GUEST_ACCOUNT_PAYLOAD_END_ADDRESS},
+        vm_slice::VmSlice,
+    },
     std::{
         alloc::Layout,
         mem::{MaybeUninit, align_of, size_of},
@@ -2693,7 +2696,8 @@ declare_builtin_function!(
         let Some((idx, region)) = memory_mapping.find_region(region_base_address) else {
             return Err(SyscallError::InvalidPointer.into());
         };
-        if region.vm_addr != region_base_address || !region.writable {
+        if region.vm_addr != region_base_address || (!region.writable &&
+            !(GUEST_ACCOUNT_PAYLOAD_BASE_ADDRESS..GUEST_ACCOUNT_PAYLOAD_END_ADDRESS).contains(&region.vm_addr)) {
             return Err(SyscallError::InvalidPointer.into());
         }
         if let Some(_increase_bytes) = new_len.checked_sub(region.len) {
