@@ -225,6 +225,8 @@ pub struct SVMTransactionExecutionCost {
     pub secp256r1_validate_cost: u64,
     /// Number of compute units consumed to decompress a secp256r1 point.
     pub secp256r1_decompress_cost: u64,
+    /// Base cost for the `SetBufferLength` syscall.
+    pub set_buffer_length_base_cost: u64,
 }
 
 impl Default for SVMTransactionExecutionCost {
@@ -288,6 +290,7 @@ impl Default for SVMTransactionExecutionCost {
             secp256r1_msm_incremental_cost: 3_800,
             secp256r1_validate_cost: 20,
             secp256r1_decompress_cost: 610,
+            set_buffer_length_base_cost: 100,
         }
     }
 }

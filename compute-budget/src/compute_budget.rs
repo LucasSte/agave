@@ -166,6 +166,8 @@ pub struct ComputeBudget {
     pub secp256r1_validate_cost: u64,
     /// Number of compute units to perform a secp256r1 point decompression.
     pub secp256r1_decompress_cost: u64,
+    /// Base cost for the `SetBufferLength` syscall.
+    pub set_buffer_length_base_cost: u64,
 }
 
 #[cfg(feature = "dev-context-only-utils")]
@@ -257,6 +259,7 @@ impl ComputeBudget {
             secp256r1_msm_incremental_cost: cost.secp256r1_msm_incremental_cost,
             secp256r1_validate_cost: cost.secp256r1_validate_cost,
             secp256r1_decompress_cost: cost.secp256r1_decompress_cost,
+            set_buffer_length_base_cost: cost.set_buffer_length_base_cost,
         }
     }
 
@@ -333,6 +336,7 @@ impl ComputeBudget {
             secp256r1_msm_incremental_cost: self.secp256r1_msm_incremental_cost,
             secp256r1_validate_cost: self.secp256r1_validate_cost,
             secp256r1_decompress_cost: self.secp256r1_decompress_cost,
+            set_buffer_length_base_cost: self.set_buffer_length_base_cost,
         }
     }
 
