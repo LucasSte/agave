@@ -493,6 +493,6 @@ fn buffer_resize_somebody_elses_account() {
             .unwrap()
             .last()
             .unwrap()
-            .contains("program other than the account's owner changed the size")
+            .contains("instruction modified data of an account it does not own")
     );
 }

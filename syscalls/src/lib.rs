@@ -8021,8 +8021,15 @@ mod tests {
             let err =
                 SyscallSetBufferLength::rust(&mut invoke_context, region.vm_addr, 4096, 0, 0, 0)
                     .unwrap_err();
-            let err = err.downcast::<SyscallError>().unwrap();
-            assert_eq!(SyscallError::InvalidPointer, *err);
+            if (8..264).contains(&idx) {
+                // Transaction context does not have any account to be resized, so the error will
+                // be `MissingAccount`.
+                let err = err.downcast::<InstructionError>().unwrap();
+                assert_eq!(InstructionError::MissingAccount, *err);
+            } else {
+                let err = err.downcast::<SyscallError>().unwrap();
+                assert_eq!(SyscallError::InvalidPointer, *err);
+            }
         }
     }
 }
