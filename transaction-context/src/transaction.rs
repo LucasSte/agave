@@ -520,12 +520,6 @@ impl<'ix_data> TransactionContext<'ix_data> {
                     return;
                 };
 
-                if index_in_transaction == u16::MAX {
-                    region.writable = true;
-                    // The region has already been created with a mutable array
-                    return;
-                }
-
                 // The call below can't really fail. If they fail because of a bug,
                 // whatever is writing will trigger an EbpfError::AccessViolation like
                 // if the region was readonly, and the transaction will fail gracefully.
@@ -539,7 +533,6 @@ impl<'ix_data> TransactionContext<'ix_data> {
                     &raw mut account.data_as_mut_slice()[..],
                     account.guest_pointer(),
                 );
-                region.access_violation_handler_payload = Some(u16::MAX);
             },
         )
     }
@@ -1679,11 +1672,6 @@ mod tests {
         region.writable = false;
         handler(&mut region, 0, AccessType::Store, 0, 0);
         assert!(!region.writable);
-        assert_eq!(region.host_addr, data.as_ptr() as u64);
-
-        region.access_violation_handler_payload = Some(u16::MAX);
-        handler(&mut region, 0, AccessType::Store, 0, 0);
-        assert!(region.writable);
         assert_eq!(region.host_addr, data.as_ptr() as u64);
 
         region.access_violation_handler_payload = Some(1);
