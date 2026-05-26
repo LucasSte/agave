@@ -185,7 +185,7 @@ impl MemoryContexts {
 
             if borrowed_account.can_data_be_changed().is_ok() && !acc_region.writable {
                 acc_region.access_violation_handler_payload = Some(account.index_in_transaction);
-            } else if !account.is_writable() {
+            } else if borrowed_account.can_data_be_changed().is_err() {
                 acc_region.access_violation_handler_payload = None;
                 acc_region.writable = false;
             }
