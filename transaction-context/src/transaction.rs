@@ -1678,7 +1678,7 @@ mod tests {
         region.writable = false;
         handler(&mut region, 0, AccessType::Store, 0, 0);
         assert!(region.writable);
-        assert_eq!(region.access_violation_handler_payload, Some(u16::MAX));
+        assert!(region.access_violation_handler_payload.is_none());
         assert_eq!(
             region.host_addr,
             tx_context.accounts.try_borrow(1).unwrap().data().as_ptr() as u64

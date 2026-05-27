@@ -45,10 +45,7 @@ use {
     solana_svm_log_collector::{ic_logger_msg, ic_msg},
     solana_svm_type_overrides::sync::Arc,
     solana_sysvar::SysvarSerialize,
-    solana_transaction_context::{
-        vm_addresses::{GUEST_ACCOUNT_PAYLOAD_BASE_ADDRESS, GUEST_ACCOUNT_PAYLOAD_END_ADDRESS},
-        vm_slice::VmSlice,
-    },
+    solana_transaction_context::vm_slice::VmSlice,
     std::{
         alloc::Layout,
         mem::{MaybeUninit, align_of, size_of},
@@ -2696,8 +2693,7 @@ declare_builtin_function!(
         let Some((idx, region)) = memory_mapping.find_region(region_base_address) else {
             return Err(SyscallError::InvalidPointer.into());
         };
-        if region.vm_addr != region_base_address || (!region.writable &&
-            !(GUEST_ACCOUNT_PAYLOAD_BASE_ADDRESS..GUEST_ACCOUNT_PAYLOAD_END_ADDRESS).contains(&region.vm_addr)) {
+        if region.vm_addr != region_base_address || !(region.writable || region.access_violation_handler_payload.is_some()) {
             return Err(SyscallError::InvalidPointer.into());
         }
         if let Some(_increase_bytes) = new_len.checked_sub(region.len) {
@@ -8021,15 +8017,8 @@ mod tests {
             let err =
                 SyscallSetBufferLength::rust(&mut invoke_context, region.vm_addr, 4096, 0, 0, 0)
                     .unwrap_err();
-            if (8..264).contains(&idx) {
-                // Transaction context does not have any account to be resized, so the error will
-                // be `MissingAccount`.
-                let err = err.downcast::<InstructionError>().unwrap();
-                assert_eq!(InstructionError::MissingAccount, *err);
-            } else {
-                let err = err.downcast::<SyscallError>().unwrap();
-                assert_eq!(SyscallError::InvalidPointer, *err);
-            }
+            let err = err.downcast::<SyscallError>().unwrap();
+            assert_eq!(SyscallError::InvalidPointer, *err);
         }
     }
 }

@@ -299,7 +299,7 @@ impl TransactionAccounts {
         }
     }
 
-    pub(crate) fn len(&self) -> usize {
+    pub fn len(&self) -> usize {
         self.shared_account_fields.len()
     }
 

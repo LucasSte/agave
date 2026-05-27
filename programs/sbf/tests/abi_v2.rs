@@ -479,7 +479,7 @@ fn buffer_resize_readonly_account() {
             .unwrap()
             .last()
             .unwrap()
-            .contains("instruction modified data of a read-only account")
+            .contains("Invalid pointer")
     );
 }
 
@@ -493,6 +493,6 @@ fn buffer_resize_somebody_elses_account() {
             .unwrap()
             .last()
             .unwrap()
-            .contains("instruction modified data of an account it does not own")
+            .contains("Invalid pointer")
     );
 }
