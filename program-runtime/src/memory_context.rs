@@ -179,9 +179,10 @@ impl MemoryContexts {
             {
                 let borrowed_account =
                     current_instruction.try_borrow_instruction_account(idx_in_ix)?;
-                if borrowed_account.can_data_be_changed().is_ok() && !acc_region.writable {
-                    acc_region.access_violation_handler_payload = Some(tx_idx as IndexOfAccount);
-                } else if borrowed_account.can_data_be_changed().is_err() {
+                let can_data_be_changed = borrowed_account.can_data_be_changed();
+                if can_data_be_changed.is_ok() && !acc_region.writable {
+                                    acc_region.access_violation_handler_payload = Some(tx_idx as IndexOfAccount);
+                } else if can_data_be_changed.is_err() {
                     acc_region.access_violation_handler_payload = None;
                     acc_region.writable = false;
                 }
