@@ -14,7 +14,6 @@ pub use self::{
 };
 use {
     crate::mem_ops::is_nonoverlapping,
-    solana_big_mod_exp::{BigModExpParams, big_mod_exp},
     solana_blake3_hasher as blake3,
     solana_cpi::MAX_RETURN_DATA,
     solana_hash::Hash,
@@ -570,6 +569,13 @@ pub fn create_program_runtime_environment(
         enable_abiv2,
         "sol_set_buffer_length",
         SyscallSetBufferLength
+    )?;
+
+    register_feature_gated_function!(
+        result,
+        enable_abiv2,
+        "sol_assign_owner",
+        SyscallSolAssignOwner
     )?;
 
     Ok(ProgramRuntimeEnvironment::from(result))
@@ -2763,10 +2769,10 @@ declare_builtin_function!(
             instruction_context.try_borrow_instruction_account(index_in_instruction)?;
 
         let old_owner = borrowed_account.get_owner();
-        borrowed_account.set_owner(translated_key)?;
 
         // Changing the owner makes the account readonly.
         if old_owner.as_ref() != translated_key {
+            borrowed_account.set_owner(translated_key)?;
             let account_region_index =
                 abiv2_region_index_from_vm_address(GUEST_ACCOUNT_PAYLOAD_BASE_ADDRESS)
                     .saturating_add(account_idx_in_tx as usize);
@@ -8098,19 +8104,21 @@ mod tests {
                 AccountSharedData::new(0, 3, &program_id),
             ),
         ];
-        with_mock_invoke_context!(invoke_context, transaction_context, 2, transaction_accounts);
+        with_mock_invoke_context!(invoke_context, transaction_context, 0, transaction_accounts);
 
         let new_owner = Pubkey::new_unique();
-        let region_zero = MemoryRegion::default();
-        let region = MemoryRegion::new(&raw const new_owner.as_array()[..], (1u64 << 32) as u64);
-        let memory_mapping = unsafe {
-            MemoryMapping::new(
-                vec![region_zero, region],
-                &Config::default(),
-                SBPFVersion::V4,
-            )
-            .unwrap()
-        };
+        let mut regions = create_abiv2_regions(invoke_context.transaction_context);
+        *regions.get_mut(1).unwrap() =
+            MemoryRegion::new(&raw const new_owner.as_array()[..], (1u64 << 32) as u64);
+        let account_region_index =
+            abiv2_region_index_from_vm_address(GUEST_ACCOUNT_PAYLOAD_BASE_ADDRESS)
+                .saturating_add(1);
+        let acc_region = regions.get_mut(account_region_index).unwrap();
+        acc_region.writable = true;
+        acc_region.access_violation_handler_payload = Some(7);
+
+        let memory_mapping =
+            unsafe { MemoryMapping::new(regions, &Config::default(), SBPFVersion::V4).unwrap() };
 
         invoke_context.compute_meter.mock_set_remaining(20);
 
@@ -8143,6 +8151,15 @@ mod tests {
             assert_eq!(modified_account.owner(), &new_owner);
         }
         assert!(invoke_context.compute_meter.consume_checked(1).is_err());
+        let acc_region = invoke_context
+            .memory_contexts
+            .memory_mapping()
+            .unwrap()
+            .get_regions()
+            .get(account_region_index)
+            .unwrap();
+        assert!(!acc_region.writable);
+        assert!(acc_region.access_violation_handler_payload.is_none());
 
         // Invalid u16
         invoke_context.compute_meter.mock_set_remaining(20);

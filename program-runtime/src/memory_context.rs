@@ -83,7 +83,6 @@ impl MemoryContexts {
         let mapping = match self.contexts.last().ok_or(InstructionError::CallDepth)? {
             MemoryContextType::ABIv1(ctx) => &ctx.memory_mapping,
             MemoryContextType::Placeholder => {
-                std::println!("Erroring here!");
                 return Err(InstructionError::ProgramEnvironmentSetupFailure);
             }
             MemoryContextType::ABIv2 => &self.abiv2_mappings,
