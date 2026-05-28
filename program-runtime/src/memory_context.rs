@@ -356,7 +356,7 @@ mod test {
                 AccountSharedData::new(60, 2, &program),
             ),
             (
-                program.clone(),
+                program,
                 AccountSharedData::new(20, 3, &Pubkey::new_unique()),
             ),
         ];
@@ -507,7 +507,7 @@ mod test {
         first_account.writable = true;
         first_account.access_violation_handler_payload = None;
         memory_contexts
-            .update_abi_v2_account_permissions(&tx_context)
+            .abi_v2_prepare_for_instruction(&tx_context)
             .unwrap();
         let ix3_regions = memory_contexts
             .abiv2_mappings
