@@ -573,6 +573,13 @@ pub fn create_program_runtime_environment(
 
     register_feature_gated_function!(result, enable_abiv2, "sol_assign_owner", SyscallAssignOwner)?;
 
+    register_feature_gated_function!(
+        result,
+        enable_abiv2,
+        "sol_transfer_lamports",
+        SolTransferLamports,
+    )?;
+
     Ok(ProgramRuntimeEnvironment::from(result))
 }
 
