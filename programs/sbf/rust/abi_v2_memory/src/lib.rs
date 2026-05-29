@@ -247,15 +247,15 @@ unsafe fn test_set_buffer_length_account(
 
 unsafe fn test_assign_owner(ix_ctx: &InstructionFrame, accounts: &mut [AccountSharedFields]) {
     let ix_accounts = ix_ctx.instruction_accounts.deref();
-    let first_account_idx = ix_accounts.get_unchecked(0).index_in_transaction as usize;
-    let second_account_idx = ix_accounts.get_unchecked(1).index_in_transaction as usize;
+    let first_account_idx_in_tx = ix_accounts.get_unchecked(0).index_in_transaction as usize;
+    let second_account_idx_in_tx = ix_accounts.get_unchecked(1).index_in_transaction as usize;
     let debug_str = format!(
         "lamports: {}",
-        accounts.get_unchecked(first_account_idx).lamports
+        accounts.get_unchecked(first_account_idx_in_tx).lamports
     );
     sol_log(debug_str.as_bytes());
 
-    let first_account = accounts.get_unchecked(first_account_idx);
+    let first_account = accounts.get_unchecked(first_account_idx_in_tx);
     let new_ower = Pubkey::new_from_array(first_account.payload.deref()[0..32].try_into().unwrap());
     let write_to_account_afterwards = first_account.payload.deref()[32];
 
@@ -264,13 +264,13 @@ unsafe fn test_assign_owner(ix_ctx: &InstructionFrame, accounts: &mut [AccountSh
         .get_unchecked(ix_ctx.program_account_index_in_tx as usize)
         .key
         .clone();
-    let second_account = accounts.get_unchecked_mut(second_account_idx);
+    let second_account = accounts.get_unchecked_mut(second_account_idx_in_tx);
     assert_eq!(program_id, second_account.owner);
 
-    assign_owner(second_account_idx as u64, &new_ower);
+    assign_owner(second_account_idx_in_tx as u64, &new_ower);
 
     // Checking new owner
-    let second_account = accounts.get_unchecked_mut(second_account_idx);
+    let second_account = accounts.get_unchecked_mut(second_account_idx_in_tx);
     assert_eq!(second_account.owner, new_ower);
 
     // I cannot write to the account after changing its owner
