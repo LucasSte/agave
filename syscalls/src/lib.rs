@@ -2787,6 +2787,45 @@ declare_builtin_function!(
     }
 );
 
+declare_builtin_function!(
+    /// Resize the specified buffer to a new size.
+    SolTransferLamports,
+    fn rust(
+        invoke_context: &mut InvokeContext<'_, '_>,
+        to_idx_in_tx: u64,
+        from_idx_in_tx: u64,
+        lamports: u64,
+        _arg4: u64,
+        _arg5: u64,
+    ) -> Result<u64, Error> {
+        let compute_units = invoke_context.get_execution_cost().sol_transfer_lamports_cost;
+        invoke_context.compute_meter.consume_checked(compute_units)?;
+
+        if lamports == 0 {
+            return Ok(0);
+        }
+
+        let instruction_context = invoke_context.transaction_context.get_current_instruction_context()?;
+        let to_idx_in_ix = instruction_context
+        .get_index_of_account_in_instruction(
+            u16::try_from(to_idx_in_tx).map_err(|_| InstructionError::MissingAccount)?
+        )?;
+        let from_idx_in_ix = instruction_context
+        .get_index_of_account_in_instruction(
+            u16::try_from(from_idx_in_tx).map_err(|_| InstructionError::MissingAccount)?
+        )?;
+
+        let mut to_account =
+            instruction_context.try_borrow_instruction_account(to_idx_in_ix)?;
+        let mut from_account =
+            instruction_context.try_borrow_instruction_account(from_idx_in_ix)?;
+
+        from_account.checked_sub_lamports(lamports)?;
+        to_account.checked_add_lamports(lamports)?;
+        Ok(0)
+    }
+);
+
 #[cfg(test)]
 #[allow(clippy::arithmetic_side_effects)]
 #[allow(clippy::indexing_slicing)]
@@ -8174,5 +8213,75 @@ mod tests {
             SyscallAssignOwner::rust(&mut invoke_context, u32::MAX as u64, 1u64 << 32, 0, 0, 0);
         let error = result.unwrap_err().downcast::<InstructionError>().unwrap();
         assert_eq!(*error, InstructionError::MissingAccount);
+    }
+
+    #[test]
+    fn test_sol_transfer_lamports() {
+        let program_id = Pubkey::new_unique();
+        let transaction_accounts = vec![
+            (
+                program_id,
+                AccountSharedData::new(0, 2, &Pubkey::new_unique()),
+            ),
+            (
+                Pubkey::new_unique(),
+                AccountSharedData::new(20, 3, &program_id),
+            ),
+            (
+                Pubkey::new_unique(),
+                AccountSharedData::new(30, 3, &program_id),
+            ),
+        ];
+        with_mock_invoke_context!(invoke_context, transaction_context, 0, transaction_accounts);
+
+        invoke_context
+            .transaction_context
+            .configure_top_level_instruction_for_tests(
+                0,
+                vec![
+                    InstructionAccount::new(1, false, true),
+                    InstructionAccount::new(2, false, true),
+                ],
+                Vec::new(),
+            )
+            .unwrap();
+
+        invoke_context.push().unwrap();
+
+        let result = SolTransferLamports::rust(&mut invoke_context, 90, 123, 0, 0, 0);
+        assert!(result.is_ok());
+
+        let result = SolTransferLamports::rust(&mut invoke_context, u32::MAX as u64, 2, 30, 0, 0);
+        assert_matches!(
+            result,
+            Result::Err(error) if error.downcast_ref::<InstructionError>().unwrap() == &InstructionError::MissingAccount
+        );
+
+        let result = SolTransferLamports::rust(&mut invoke_context, 1, u32::MAX as u64, 30, 0, 0);
+        assert_matches!(
+            result,
+            Result::Err(error) if error.downcast_ref::<InstructionError>().unwrap() == &InstructionError::MissingAccount
+        );
+
+        let result = SolTransferLamports::rust(&mut invoke_context, 2, 1, 10, 0, 0);
+        assert!(result.is_ok());
+        assert_eq!(
+            invoke_context
+                .transaction_context
+                .accounts()
+                .try_borrow(1)
+                .unwrap()
+                .lamports(),
+            10
+        );
+        assert_eq!(
+            invoke_context
+                .transaction_context
+                .accounts()
+                .try_borrow(2)
+                .unwrap()
+                .lamports(),
+            40
+        );
     }
 }
