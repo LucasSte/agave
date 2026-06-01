@@ -577,7 +577,7 @@ pub fn create_program_runtime_environment(
         result,
         enable_abiv2,
         "sol_transfer_lamports",
-        SolTransferLamports,
+        TransferLamports,
     )?;
 
     Ok(ProgramRuntimeEnvironment::from(result))
@@ -2796,7 +2796,7 @@ declare_builtin_function!(
 
 declare_builtin_function!(
     /// Resize the specified buffer to a new size.
-    SolTransferLamports,
+    TransferLamports,
     fn rust(
         invoke_context: &mut InvokeContext<'_, '_>,
         to_idx_in_tx: u64,
@@ -2807,10 +2807,6 @@ declare_builtin_function!(
     ) -> Result<u64, Error> {
         let compute_units = invoke_context.get_execution_cost().sol_transfer_lamports_cost;
         invoke_context.compute_meter.consume_checked(compute_units)?;
-
-        if lamports == 0 {
-            return Ok(0);
-        }
 
         let instruction_context = invoke_context.transaction_context.get_current_instruction_context()?;
         let to_idx_in_ix = instruction_context
@@ -8255,22 +8251,19 @@ mod tests {
 
         invoke_context.push().unwrap();
 
-        let result = SolTransferLamports::rust(&mut invoke_context, 90, 123, 0, 0, 0);
-        assert!(result.is_ok());
+        let result = TransferLamports::rust(&mut invoke_context, 90, 123, 0, 0, 0);
+        let err = result.unwrap_err().downcast::<InstructionError>().unwrap();
+        assert_eq!(*err, InstructionError::MissingAccount,);
 
-        let result = SolTransferLamports::rust(&mut invoke_context, u32::MAX as u64, 2, 30, 0, 0);
-        assert_matches!(
-            result,
-            Result::Err(error) if error.downcast_ref::<InstructionError>().unwrap() == &InstructionError::MissingAccount
-        );
+        let result = TransferLamports::rust(&mut invoke_context, u32::MAX as u64, 2, 30, 0, 0);
+        let err = result.unwrap_err().downcast::<InstructionError>().unwrap();
+        assert_eq!(*err, InstructionError::MissingAccount,);
 
-        let result = SolTransferLamports::rust(&mut invoke_context, 1, u32::MAX as u64, 30, 0, 0);
-        assert_matches!(
-            result,
-            Result::Err(error) if error.downcast_ref::<InstructionError>().unwrap() == &InstructionError::MissingAccount
-        );
+        let result = TransferLamports::rust(&mut invoke_context, 1, u32::MAX as u64, 30, 0, 0);
+        let err = result.unwrap_err().downcast::<InstructionError>().unwrap();
+        assert_eq!(*err, InstructionError::MissingAccount,);
 
-        let result = SolTransferLamports::rust(&mut invoke_context, 2, 1, 10, 0, 0);
+        let result = TransferLamports::rust(&mut invoke_context, 2, 1, 10, 0, 0);
         assert!(result.is_ok());
         assert_eq!(
             invoke_context
