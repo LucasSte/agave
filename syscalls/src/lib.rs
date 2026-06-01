@@ -571,12 +571,7 @@ pub fn create_program_runtime_environment(
         SyscallSetBufferLength
     )?;
 
-    register_feature_gated_function!(
-        result,
-        enable_abiv2,
-        "sol_assign_owner",
-        SyscallSolAssignOwner
-    )?;
+    register_feature_gated_function!(result, enable_abiv2, "sol_assign_owner", SyscallAssignOwner)?;
 
     Ok(ProgramRuntimeEnvironment::from(result))
 }
@@ -2736,7 +2731,7 @@ declare_builtin_function!(
 
 declare_builtin_function!(
     // Assign account owner for ABIv2
-    SyscallSolAssignOwner,
+    SyscallAssignOwner,
     fn rust(
         invoke_context: &mut InvokeContext<'_, '_>,
         account_idx_in_tx: u64,
@@ -2751,10 +2746,9 @@ declare_builtin_function!(
             .consume_checked(compute_units)?;
 
         let is_check_aligned = invoke_context.get_check_aligned();
-        let translated_key = translate_slice::<u8>(
+        let translated_key = translate_type::<Pubkey>(
             invoke_context.memory_contexts.memory_mapping()?,
             new_owner_ptr,
-            32,
             is_check_aligned,
         )?;
 
@@ -2771,8 +2765,8 @@ declare_builtin_function!(
         let old_owner = borrowed_account.get_owner();
 
         // Changing the owner makes the account readonly.
-        if old_owner.as_ref() != translated_key {
-            borrowed_account.set_owner(translated_key)?;
+        if old_owner != translated_key {
+            borrowed_account.set_owner(translated_key.as_ref())?;
             let account_region_index =
                 abiv2_region_index_from_vm_address(GUEST_ACCOUNT_PAYLOAD_BASE_ADDRESS)
                     .saturating_add(account_idx_in_tx as usize);
@@ -8109,7 +8103,7 @@ mod tests {
         let new_owner = Pubkey::new_unique();
         let mut regions = create_abiv2_regions(invoke_context.transaction_context);
         *regions.get_mut(1).unwrap() =
-            MemoryRegion::new(&raw const new_owner.as_array()[..], (1u64 << 32) as u64);
+            MemoryRegion::new(&raw const new_owner.as_array()[..], 1u64 << 32);
         let account_region_index =
             abiv2_region_index_from_vm_address(GUEST_ACCOUNT_PAYLOAD_BASE_ADDRESS)
                 .saturating_add(1);
@@ -8140,7 +8134,7 @@ mod tests {
             .mock_set_mapping_abi_v2(memory_mapping);
 
         // Happy path
-        let result = SyscallSolAssignOwner::rust(&mut invoke_context, 1, 1u64 << 32, 0, 0, 0);
+        let result = SyscallAssignOwner::rust(&mut invoke_context, 1, 1u64 << 32, 0, 0, 0);
         assert!(result.is_ok());
         {
             let modified_account = invoke_context
@@ -8164,10 +8158,8 @@ mod tests {
         // Invalid u16
         invoke_context.compute_meter.mock_set_remaining(20);
         let result =
-            SyscallSolAssignOwner::rust(&mut invoke_context, u32::MAX as u64, 1u64 << 32, 0, 0, 0);
-        assert_matches!(
-            result,
-            Result::Err(error) if error.downcast_ref::<InstructionError>().unwrap() == &InstructionError::MissingAccount
-        );
+            SyscallAssignOwner::rust(&mut invoke_context, u32::MAX as u64, 1u64 << 32, 0, 0, 0);
+        let error = result.unwrap_err().downcast::<InstructionError>().unwrap();
+        assert_eq!(*error, InstructionError::MissingAccount);
     }
 }
