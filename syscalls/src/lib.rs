@@ -577,7 +577,7 @@ pub fn create_program_runtime_environment(
         result,
         enable_abiv2,
         "sol_transfer_lamports",
-        TransferLamports,
+        SyscallTransferLamports,
     )?;
 
     Ok(ProgramRuntimeEnvironment::from(result))
@@ -2796,7 +2796,7 @@ declare_builtin_function!(
 
 declare_builtin_function!(
     /// Resize the specified buffer to a new size.
-    TransferLamports,
+    SyscallTransferLamports,
     fn rust(
         invoke_context: &mut InvokeContext<'_, '_>,
         to_idx_in_tx: u64,
@@ -8251,19 +8251,21 @@ mod tests {
 
         invoke_context.push().unwrap();
 
-        let result = TransferLamports::rust(&mut invoke_context, 90, 123, 0, 0, 0);
+        let result = SyscallTransferLamports::rust(&mut invoke_context, 90, 123, 0, 0, 0);
         let err = result.unwrap_err().downcast::<InstructionError>().unwrap();
         assert_eq!(*err, InstructionError::MissingAccount,);
 
-        let result = TransferLamports::rust(&mut invoke_context, u32::MAX as u64, 2, 30, 0, 0);
+        let result =
+            SyscallTransferLamports::rust(&mut invoke_context, u32::MAX as u64, 2, 30, 0, 0);
         let err = result.unwrap_err().downcast::<InstructionError>().unwrap();
         assert_eq!(*err, InstructionError::MissingAccount,);
 
-        let result = TransferLamports::rust(&mut invoke_context, 1, u32::MAX as u64, 30, 0, 0);
+        let result =
+            SyscallTransferLamports::rust(&mut invoke_context, 1, u32::MAX as u64, 30, 0, 0);
         let err = result.unwrap_err().downcast::<InstructionError>().unwrap();
         assert_eq!(*err, InstructionError::MissingAccount,);
 
-        let result = TransferLamports::rust(&mut invoke_context, 2, 1, 10, 0, 0);
+        let result = SyscallTransferLamports::rust(&mut invoke_context, 2, 1, 10, 0, 0);
         assert!(result.is_ok());
         assert_eq!(
             invoke_context
