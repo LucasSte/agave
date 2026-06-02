@@ -227,6 +227,8 @@ pub struct SVMTransactionExecutionCost {
     pub secp256r1_decompress_cost: u64,
     /// Base cost for the `SetBufferLength` syscall.
     pub set_buffer_length_base_cost: u64,
+    /// Cost for sol_assign_owner available in ABIv2
+    pub abi_v2_assign_owner: u64,
 }
 
 impl Default for SVMTransactionExecutionCost {
@@ -291,6 +293,7 @@ impl Default for SVMTransactionExecutionCost {
             secp256r1_validate_cost: 20,
             secp256r1_decompress_cost: 610,
             set_buffer_length_base_cost: 100,
+            abi_v2_assign_owner: 20,
         }
     }
 }
