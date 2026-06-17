@@ -358,6 +358,7 @@ pub fn execute<'a, 'b: 'a>(
         let execute_time = Measure::start("execute");
         let prev_nested_exec_time = vm.context().total_nested_exec_time;
 
+        // Program entrypoint arguments
         if let Some(v1_params) = &abiv1_parameters {
             vm.registers[1] = ebpf::MM_INPUT_START;
             vm.registers[2] = v1_params.serialization_result.instruction_data_offset as u64;
@@ -380,6 +381,23 @@ pub fn execute<'a, 'b: 'a>(
                 };
                 vm.registers[5] = number_of_instruction_accounts as u64;
             }
+        } else {
+            vm.registers[1] = vm.context().transaction_context.ix_frame_guest_ptr()?;
+
+            (
+                vm.registers[2],
+                vm.registers[3],
+                vm.registers[4],
+                vm.registers[5],
+            ) = {
+                let ix_frame = vm.context().transaction_context.current_ix_frame()?;
+                (
+                    ix_frame.instruction_accounts.ptr(),
+                    ix_frame.instruction_accounts.len(),
+                    ix_frame.instruction_data.ptr(),
+                    ix_frame.instruction_data.len(),
+                )
+            };
         }
 
         let mut call_frames =
