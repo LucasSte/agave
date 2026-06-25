@@ -189,9 +189,25 @@ impl<'ix_data> TransactionContext<'ix_data> {
         // We need an extra space for the placeholder, so we avoid relocations.
         let mut instruction_trace =
             Vec::with_capacity(instruction_trace_capacity.saturating_add(1));
+        let mut deduplication_maps =
+            Vec::with_capacity(instruction_trace_capacity.saturating_add(1));
+        let mut instruction_accounts =
+            Vec::with_capacity(instruction_trace_capacity.saturating_add(1));
+        let mut instruction_data = Vec::with_capacity(instruction_trace_capacity.saturating_add(1));
+
         instruction_trace.resize_with(
             number_of_top_level_instructions.saturating_add(1),
             InstructionFrame::default,
+        );
+        deduplication_maps.resize_with(
+            number_of_top_level_instructions.saturating_add(1),
+            Box::default,
+        );
+        instruction_accounts
+            .resize_with(number_of_top_level_instructions.saturating_add(1), Vec::new);
+        instruction_data.resize(
+            number_of_top_level_instructions.saturating_add(1),
+            Cow::Owned(Vec::new()),
         );
 
         Self {
@@ -209,9 +225,9 @@ impl<'ix_data> TransactionContext<'ix_data> {
             compute_meter,
             lamports_delta: Cell::new(0),
             rent,
-            instruction_accounts: Vec::with_capacity(instruction_trace_capacity),
-            deduplication_maps: Vec::with_capacity(instruction_trace_capacity),
-            instruction_data: Vec::with_capacity(instruction_trace_capacity),
+            instruction_accounts,
+            deduplication_maps,
+            instruction_data,
         }
     }
 
@@ -432,10 +448,22 @@ impl<'ix_data> TransactionContext<'ix_data> {
             instruction_accounts.len(),
             instruction_data.len() as u64,
         );
-        self.deduplication_maps
-            .push(deduplication_map.into_boxed_slice());
-        self.instruction_accounts.push(instruction_accounts);
-        self.instruction_data.push(instruction_data);
+
+        *self
+            .deduplication_maps
+            .get_mut(instruction_index)
+            .ok_or(InstructionError::MaxInstructionTraceLengthExceeded)? =
+            deduplication_map.into_boxed_slice();
+
+        *self
+            .instruction_accounts
+            .get_mut(instruction_index)
+            .ok_or(InstructionError::MaxInstructionTraceLengthExceeded)? = instruction_accounts;
+
+        *self
+            .instruction_data
+            .get_mut(instruction_index)
+            .ok_or(InstructionError::MaxInstructionTraceLengthExceeded)? = instruction_data;
         Ok(())
     }
 
@@ -599,6 +627,9 @@ impl<'ix_data> TransactionContext<'ix_data> {
                 .number_of_cpis_in_trace
                 .saturating_add(1);
             self.instruction_trace.push(InstructionFrame::default());
+            self.deduplication_maps.push(Box::default());
+            self.instruction_accounts.push(Vec::new());
+            self.instruction_data.push(Cow::Owned(Vec::new()));
             (
                 index,
                 self.next_top_level_instruction_index.saturating_sub(1),
@@ -839,6 +870,8 @@ impl<'ix_data> TransactionContext<'ix_data> {
         // The last frame is a placeholder for the next instruction to be executed, so it
         // is empty.
         self.instruction_trace.pop();
+        self.instruction_accounts.pop();
+        self.instruction_data.pop();
         (
             std::mem::take(&mut self.instruction_trace),
             std::mem::take(&mut self.instruction_accounts),
@@ -1163,6 +1196,7 @@ mod tests {
             )
             .unwrap();
         transaction_context.push(true).unwrap();
+        transaction_context.pop().unwrap();
 
         let instruction_accounts_2 = vec![
             InstructionAccount::new(0, false, true),
@@ -1176,7 +1210,9 @@ mod tests {
                 vec![5, 6, 7, 8, 9],
             )
             .unwrap();
+
         transaction_context.push(true).unwrap();
+        transaction_context.pop().unwrap();
 
         let instruction_accounts_3 = vec![
             InstructionAccount::new(0, false, true),
