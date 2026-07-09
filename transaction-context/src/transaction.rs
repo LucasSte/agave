@@ -424,7 +424,7 @@ impl<'ix_data> TransactionContext<'ix_data> {
     fn deduplicate_accounts(
         num_accounts: usize,
         instruction_accounts: &mut [InstructionAccount],
-    ) -> Vec<u8> {
+    ) -> Result<Vec<u8>, InstructionError> {
         let mut dedup_map = vec![u8::MAX; num_accounts];
         for idx_in_ix in 0..instruction_accounts.len() {
             let first_occurrence_in_ix = dedup_map
@@ -434,7 +434,8 @@ impl<'ix_data> TransactionContext<'ix_data> {
                         .unwrap()
                         .index_in_transaction as usize,
                 )
-                .unwrap();
+                .ok_or(InstructionError::MissingAccount)?;
+
             if *first_occurrence_in_ix == u8::MAX {
                 *first_occurrence_in_ix = idx_in_ix as u8;
             } else {
@@ -451,7 +452,7 @@ impl<'ix_data> TransactionContext<'ix_data> {
         }
 
         Self::replicate_account_flags(instruction_accounts, &dedup_map);
-        dedup_map
+        Ok(dedup_map)
     }
 
     /// Replicate account flags to duplicated accounts.
@@ -991,7 +992,7 @@ impl<'ix_data> TransactionContext<'ix_data> {
 
                 let ix_accs = self
                     .instruction_accounts
-                    .get_mut(ix_idx)
+                    .last_mut()
                     .ok_or(InstructionError::InvalidArgument)?;
 
                 ix_accs.resize(
@@ -1039,6 +1040,37 @@ impl<'ix_data> TransactionContext<'ix_data> {
             .instruction_trace
             .get(current_instruction_idx)
             .expect("The frame for this instruction must exist"))
+    }
+
+    /// Build an ABIv2 instruction frame for CPI
+    /// It receives the index of the callee program account in the transaction
+    pub fn build_abi_v2_frame(
+        &mut self,
+        program_idx_in_tx: IndexOfAccount,
+    ) -> Result<(), InstructionError> {
+        // This unused program id must stay here so we can confirm the give index points to
+        // an existing transaction account.
+        let _program_id = self.get_key_of_account_at_index(program_idx_in_tx)?;
+        self.transaction_frame.configure_cpi();
+        let caller_instruction = self.get_current_instruction_index()?;
+        let next_frame = self
+            .instruction_trace
+            .last_mut()
+            .ok_or(InstructionError::CallDepth)?;
+        next_frame.program_account_index_in_tx = program_idx_in_tx;
+        next_frame.index_of_caller_instruction = caller_instruction as u16;
+
+        let ix_accounts = self
+            .instruction_accounts
+            .last_mut()
+            .ok_or(InstructionError::CallDepth)?;
+        // Deduplicate the instruction accounts the caller wrote in the CPI scratchpad
+        let dedup_map = Self::deduplicate_accounts(ix_accounts)?;
+        *self
+            .deduplication_maps
+            .last_mut()
+            .ok_or(InstructionError::CallDepth)? = dedup_map.into_boxed_slice();
+        Ok(())
     }
 }
 
@@ -2215,7 +2247,8 @@ mod tests {
             InstructionAccount::new(1, true, false), // Account 1 again, signer
         ];
 
-        let dedup_map = TransactionContext::deduplicate_accounts(&mut instruction_accounts);
+        let dedup_map =
+            TransactionContext::deduplicate_accounts(&mut instruction_accounts).unwrap();
 
         // Check that the dedup_map correctly maps duplicate accounts
         assert_eq!(
@@ -2304,7 +2337,8 @@ mod tests {
             InstructionAccount::new(2, false, false),
         ];
 
-        let dedup_map = TransactionContext::deduplicate_accounts(&mut instruction_accounts);
+        let dedup_map =
+            TransactionContext::deduplicate_accounts(&mut instruction_accounts).unwrap();
 
         // Check that the dedup_map correctly maps each account to itself
         assert_eq!(
@@ -2348,7 +2382,8 @@ mod tests {
             InstructionAccount::new(0, false, false),
         ];
 
-        let dedup_map = TransactionContext::deduplicate_accounts(&mut instruction_accounts);
+        let dedup_map =
+            TransactionContext::deduplicate_accounts(&mut instruction_accounts).unwrap();
 
         // Check that all accounts map to the first occurrence (index 0)
         assert_eq!(
@@ -2440,5 +2475,56 @@ mod tests {
             region.host_buffer().ptr().cast(),
             tx_context.accounts.try_borrow(1).unwrap().data().as_ptr()
         );
+    }
+
+    #[test]
+    fn test_set_abi_v2_frame_wrong_input() {
+        let transaction_accounts = vec![
+            (
+                Pubkey::new_unique(),
+                AccountSharedData::new(20, 8, &Pubkey::new_unique()),
+            ),
+            (
+                Pubkey::new_unique(),
+                AccountSharedData::new(30, 8, &Pubkey::new_unique()),
+            ),
+        ];
+        let mut tx_context =
+            TransactionContext::new(transaction_accounts, Rent::default(), 20, 20, 1);
+
+        tx_context
+            .configure_instruction_at_index(
+                0,
+                0,
+                vec![InstructionAccount::new(1, false, false)],
+                vec![u16::MAX; MAX_ACCOUNTS_PER_TRANSACTION],
+                Cow::Owned(Vec::new()),
+                None,
+            )
+            .unwrap();
+
+        tx_context.push().unwrap();
+
+        // Let's configure the CPI
+        {
+            let ix_accounts = tx_context.instruction_accounts.last_mut().unwrap();
+            ix_accounts.push(InstructionAccount::new(0, false, false));
+        }
+
+        // Non-existing program id
+        // A program account index that is not part of the transaction
+        let result = tx_context.build_abi_v2_frame(9);
+        assert_eq!(result.err().unwrap(), InstructionError::MissingAccount);
+
+        // Push a nonexisting account in the array
+        // This part actually checks if the function `deduplicate_accounts` will return an error
+        // for a nonexisting account.
+        {
+            let ix_accounts = tx_context.instruction_accounts.last_mut().unwrap();
+            ix_accounts.push(InstructionAccount::new(300, false, false));
+        }
+
+        let result = tx_context.build_abi_v2_frame(1);
+        assert_eq!(result.err().unwrap(), InstructionError::MissingAccount);
     }
 }
