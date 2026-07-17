@@ -7708,7 +7708,6 @@ dependencies = [
  "solana-slot-hashes",
  "solana-stable-layout",
  "solana-stake-history",
- "solana-stake-interface",
  "solana-svm-callback",
  "solana-svm-feature-set",
  "solana-svm-log-collector",
@@ -8337,7 +8336,7 @@ dependencies = [
  "solana-pubkey 4.2.0",
  "solana-rent",
  "solana-slot-hashes",
- "solana-stake-interface",
+ "solana-stake-history",
  "solana-transaction-context",
 ]
 
