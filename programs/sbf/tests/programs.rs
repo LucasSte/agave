@@ -5513,45 +5513,46 @@ fn authorize_nonce() {
         .unwrap();
 
     let mut authority = Keypair::new();
-    let nonce = Keypair::new();
+    let mut nonces = Vec::new();
+    for _ in 0..4 {
+        let nonce = Keypair::new();
 
-    let authority_data = AccountSharedData::new(6467979786515, 0, &system_program::id());
-    bank.store_account(&authority.pubkey(), &authority_data);
+        let authority_data = AccountSharedData::new(6467979786515, 0, &system_program::id());
+        bank.store_account(&authority.pubkey(), &authority_data);
 
-    let create_ix = solana_system_interface::instruction::create_account(
-        &authority.pubkey(), &nonce.pubkey(),
-        rent.minimum_balance(MAX_PERMITTED_DATA_LENGTH as usize),
-        MAX_PERMITTED_DATA_LENGTH, &system_program::id(),
-    );
+        let create_ix = solana_system_interface::instruction::create_account(
+            &authority.pubkey(), &nonce.pubkey(),
+            rent.minimum_balance(MAX_PERMITTED_DATA_LENGTH as usize),
+            MAX_PERMITTED_DATA_LENGTH, &system_program::id(),
+        );
 
-    let create_tx = Transaction::new_signed_with_payer(
-        &[create_ix], Some(&authority.pubkey()), &[authority.insecure_clone(), nonce.insecure_clone()],
-        bank.last_blockhash()
-    );
+        let create_tx = Transaction::new_signed_with_payer(
+            &[create_ix], Some(&authority.pubkey()), &[authority.insecure_clone(), nonce.insecure_clone()],
+            bank.last_blockhash()
+        );
 
-    let (result, _cpis, logs, _) = process_transaction_and_record_inner(&bank, create_tx);
-    std::println!("Tx1");
-    std::println!("res: {:?}", result);
-    std::println!("logs: {:?}", logs);
+        let (result, _cpis, logs, _) = process_transaction_and_record_inner(&bank, create_tx);
+        std::println!("Tx1");
+        std::println!("res: {:?}", result);
+        std::println!("logs: {:?}", logs);
 
-    let initialize_ix = Instruction::new_with_bincode(
-        system_program::id(),
-        &solana_system_interface::instruction::SystemInstruction::InitializeNonceAccount(authority.pubkey()),
-        vec![
-            AccountMeta::new(nonce.pubkey(), false),
-            AccountMeta::new_readonly(sysvar::recent_blockhashes::id(), false),
-            AccountMeta::new_readonly(sysvar::rent::id(), false),
-        ],
-    );
-    let initialize_tx = Transaction::new_signed_with_payer(
-        &[initialize_ix], Some(&authority.pubkey()), &[authority.insecure_clone()],
-        bank.last_blockhash()
-    );
+        let initialize_ix = Instruction::new_with_bincode(
+            system_program::id(),
+            &solana_system_interface::instruction::SystemInstruction::InitializeNonceAccount(authority.pubkey()),
+            vec![
+                AccountMeta::new(nonce.pubkey(), false),
+                AccountMeta::new_readonly(sysvar::recent_blockhashes::id(), false),
+                AccountMeta::new_readonly(sysvar::rent::id(), false),
+            ],
+        );
+        let initialize_tx = Transaction::new_signed_with_payer(
+            &[initialize_ix], Some(&authority.pubkey()), &[authority.insecure_clone()],
+            bank.last_blockhash()
+        );
 
-    let (result, _cpis, logs, _) = process_transaction_and_record_inner(&bank, initialize_tx);
-    std::println!("Tx2");
-    std::println!("res: {:?}", result);
-    std::println!("logs: {:?}", logs);
+        let (result, _cpis, logs, _) = process_transaction_and_record_inner(&bank, initialize_tx);
+        nonces.push(nonce);
+    }
 
     let mut authorize_ixs = vec![
         ComputeBudgetInstruction::set_compute_unit_limit(100_000),
@@ -5561,11 +5562,11 @@ fn authorize_nonce() {
 
 
     let now = std::time::Instant::now();
-    for _ in 0..50 {
+    for i in 0..100 {
         let new_authority = Keypair::new();
         *authorize_ixs.get_mut(2).unwrap() =
             solana_system_interface::instruction::authorize_nonce_account(
-                &nonce.pubkey(), &authority.pubkey(), &new_authority.pubkey(),
+                &nonces.get(i % 4).unwrap().pubkey(), &authority.pubkey(), &new_authority.pubkey(),
             );
         let slow_tx = Transaction::new_signed_with_payer(
             &authorize_ixs,
