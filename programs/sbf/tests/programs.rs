@@ -5520,8 +5520,8 @@ fn authorize_nonce() {
 
     let create_ix = solana_system_interface::instruction::create_account(
         &authority.pubkey(), &nonce.pubkey(),
-        rent.minimum_balance(200 as usize),
-        200, &system_program::id(),
+        rent.minimum_balance(MAX_PERMITTED_DATA_LENGTH as usize),
+        MAX_PERMITTED_DATA_LENGTH, &system_program::id(),
     );
 
     let create_tx = Transaction::new_signed_with_payer(
@@ -5591,4 +5591,140 @@ fn authorize_nonce() {
     // std::println!("Tx3");
     // std::println!("res: {:?}", result);
     // std::println!("logs: {:?}", logs);
+}
+
+#[test]
+fn maximum_load() {
+    agave_logger::setup();
+
+    let GenesisConfigInfo {
+        genesis_config,
+        mint_keypair,
+        ..
+    } = create_genesis_config(100_123_456_789);
+
+    let rent = Rent::default();
+    let mut bank = Bank::new_for_tests(&genesis_config);
+    let (bank, bank_forks) = bank.wrap_with_bank_forks_for_tests();
+    let mut bank_client = BankClient::new_shared(bank.clone());
+    let bank = bank_client
+        .advance_slot(1, &bank_forks, SlotLeader::default())
+        .unwrap();
+
+    let mut authority = Keypair::new();
+    let mut nonces = Vec::new();
+
+    let authority_data = AccountSharedData::new(6467979786515, 0, &system_program::id());
+    bank.store_account(&authority.pubkey(), &authority_data);
+
+    for _ in 0..6 {
+        let nonce = Keypair::new();
+        let create_ix = solana_system_interface::instruction::create_account(
+            &authority.pubkey(), &nonce.pubkey(),
+            rent.minimum_balance(MAX_PERMITTED_DATA_LENGTH as usize),
+            MAX_PERMITTED_DATA_LENGTH, &system_program::id(),
+        );
+
+        let create_tx = Transaction::new_signed_with_payer(
+            &[create_ix], Some(&authority.pubkey()), &[authority.insecure_clone(), nonce.insecure_clone()],
+            bank.last_blockhash()
+        );
+
+        let (result, _cpis, logs, _) = process_transaction_and_record_inner(&bank, create_tx);
+
+        let initialize_ix = Instruction::new_with_bincode(
+            system_program::id(),
+            &solana_system_interface::instruction::SystemInstruction::InitializeNonceAccount(authority.pubkey()),
+            vec![
+                AccountMeta::new(nonce.pubkey(), false),
+                AccountMeta::new_readonly(sysvar::recent_blockhashes::id(), false),
+                AccountMeta::new_readonly(sysvar::rent::id(), false),
+            ],
+        );
+        let initialize_tx = Transaction::new_signed_with_payer(
+            &[initialize_ix], Some(&authority.pubkey()), &[authority.insecure_clone()],
+            bank.last_blockhash()
+        );
+
+        let (result, _cpis, logs, _) = process_transaction_and_record_inner(&bank, initialize_tx);
+
+        nonces.push(nonce);
+    }
+
+    let nonce = Keypair::new();
+    let create_ix = solana_system_interface::instruction::create_account(
+        &authority.pubkey(), &nonce.pubkey(),
+        rent.minimum_balance(400 as usize),
+        400, &system_program::id(),
+    );
+
+    let create_tx = Transaction::new_signed_with_payer(
+        &[create_ix], Some(&authority.pubkey()), &[authority.insecure_clone(), nonce.insecure_clone()],
+        bank.last_blockhash()
+    );
+
+    let (result, _cpis, logs, _) = process_transaction_and_record_inner(&bank, create_tx);
+
+
+    let initialize_ix = Instruction::new_with_bincode(
+        system_program::id(),
+        &solana_system_interface::instruction::SystemInstruction::InitializeNonceAccount(authority.pubkey()),
+        vec![
+            AccountMeta::new(nonce.pubkey(), false),
+            AccountMeta::new_readonly(sysvar::recent_blockhashes::id(), false),
+            AccountMeta::new_readonly(sysvar::rent::id(), false),
+        ],
+    );
+    let initialize_tx = Transaction::new_signed_with_payer(
+        &[initialize_ix], Some(&authority.pubkey()), &[authority.insecure_clone()],
+        bank.last_blockhash()
+    );
+
+    let (result, _cpis, logs, _) = process_transaction_and_record_inner(&bank, initialize_tx);
+    std::println!("Tx2");
+    std::println!("res: {:?}", result);
+    std::println!("logs: {:?}", logs);
+
+    nonces.push(nonce);
+
+
+    let mut authorize_ixs = vec![
+        ComputeBudgetInstruction::set_compute_unit_limit(100_000),
+        ComputeBudgetInstruction::set_compute_unit_price(10_000_000),
+    ];
+
+    for nonce in &nonces {
+        let new_authority = Keypair::new();
+        authorize_ixs.push(
+            solana_system_interface::instruction::authorize_nonce_account(
+                &nonce.pubkey(), &authority.pubkey(), &new_authority.pubkey(),
+            )
+        );
+    }
+
+
+    let now = std::time::Instant::now();
+    let slow_tx = Transaction::new_signed_with_payer(
+        &authorize_ixs,
+        Some(&authority.pubkey()),
+        &[authority.insecure_clone()],
+        bank.last_blockhash(),
+    );
+
+    let (result, _cpis, logs, _) = process_transaction_and_record_inner(&bank, slow_tx);
+    let elapsed = now.elapsed();
+    std::println!("Total time: {}", elapsed.as_micros());
+
+    //
+    // let slow_tx = Transaction::new_signed_with_payer(
+    //     &authorize_ixs,
+    //     Some(&authority.pubkey()),
+    //     &authorize_keypairs,
+    //     bank.last_blockhash(),
+    // );
+    //
+    // let (result, _cpis, logs, _) = process_transaction_and_record_inner(&bank, slow_tx);
+    std::println!("Tx3");
+    std::println!("res: {:?}", result);
+    std::println!("logs: {:?}", logs);
 }
