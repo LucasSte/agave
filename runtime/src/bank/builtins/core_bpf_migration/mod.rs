@@ -9,7 +9,7 @@ use {
     error::CoreBpfMigrationError,
     num_traits::{CheckedAdd, CheckedSub},
     solana_account::{
-        AccountSharedData, ReadableAccount, WritableAccount, state_traits::StateMutWincode as _,
+        AccountSharedData, ReadableAccount, WritableAccount, state_traits::StateMutWincode,
     },
     solana_builtins::core_bpf_migration::CoreBpfMigrationConfig,
     solana_compute_budget::compute_budget::ComputeBudget,
@@ -58,8 +58,8 @@ impl Bank {
         };
         let lamports =
             self.get_minimum_balance_for_rent_exemption(UpgradeableLoaderState::size_of_program());
-        let mut account =
-            AccountSharedData::new_data(lamports, &state, &bpf_loader_upgradeable::id())?;
+        let mut account: AccountSharedData =
+            StateMutWincode::new_data(lamports, &state, &bpf_loader_upgradeable::id())?;
         account.set_executable(true);
         Ok(account)
     }
@@ -106,7 +106,7 @@ impl Bank {
                 upgrade_authority_address,
             };
 
-            let mut account = AccountSharedData::new_data_with_space(
+            let mut account: AccountSharedData = StateMutWincode::new_data_with_space(
                 lamports,
                 &programdata_metadata,
                 space,
