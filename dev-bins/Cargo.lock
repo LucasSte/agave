@@ -7940,7 +7940,6 @@ dependencies = [
  "arrayref",
  "assert_matches",
  "base64 0.23.1",
- "bincode",
  "bitvec",
  "bytemuck",
  "bytes",
