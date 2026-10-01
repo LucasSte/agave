@@ -5,6 +5,7 @@ use {
     crate::{
         DropOnBailOut, IndexOfAccount, MAX_ACCOUNT_DATA_GROWTH_PER_TRANSACTION,
         MAX_ACCOUNT_DATA_LEN, MAX_ACCOUNTS_PER_INSTRUCTION, MAX_ACCOUNTS_PER_TRANSACTION,
+        MAX_INSTRUCTION_TRACE_LENGTH,
         instruction::{InstructionContext, InstructionFrame},
         transaction_accounts::{KeyedAccountSharedData, TransactionAccounts},
         vm_addresses::{
@@ -118,25 +119,8 @@ impl TransactionFrame {
     }
 }
 
-impl VmExposable for TransactionFrame {}
-
 #[cfg(not(any(target_arch = "sbf", target_arch = "bpf")))]
-impl TransactionFrame {
-    fn configure_cpi(&mut self) {
-        self.total_number_of_instructions_in_trace =
-            self.total_number_of_instructions_in_trace.saturating_add(1);
-        let next_data_ptr = self
-            .cpi_data_scratchpad
-            .ptr()
-            .saturating_add(GUEST_REGION_SIZE);
-        self.cpi_data_scratchpad = VmSlice::new(next_data_ptr, 0);
-        let next_accounts_ptr = self
-            .cpi_accounts_scratchpad
-            .ptr()
-            .saturating_add(GUEST_REGION_SIZE);
-        self.cpi_accounts_scratchpad = VmSlice::new(next_accounts_ptr, 0);
-    }
-}
+impl VmExposable for TransactionFrame {}
 
 /// Loaded transaction shared between runtime and programs.
 ///
@@ -564,7 +548,7 @@ impl<'ix_data> TransactionContext<'ix_data> {
         let dedup_map = Self::deduplicate_accounts(
             self.get_number_of_accounts() as usize,
             &mut instruction_accounts,
-        );
+        )?;
 
         self.configure_instruction_at_index(
             self.next_top_level_instruction_index,
@@ -588,7 +572,7 @@ impl<'ix_data> TransactionContext<'ix_data> {
         let dedup_map = Self::deduplicate_accounts(
             self.get_number_of_accounts() as usize,
             &mut instruction_accounts,
-        );
+        )?;
         let caller_index = self.get_current_instruction_index()?;
         let cpi_index = self.get_instruction_trace_length();
         self.configure_instruction_at_index(
@@ -1141,6 +1125,7 @@ impl<'ix_data> TransactionContext<'ix_data> {
     ) -> Result<(), InstructionError> {
         // This unused program id must stay here so we can confirm the give index points to
         // an existing transaction account.
+        let number_of_tx_accounts = self.get_number_of_accounts() as usize;
         let _program_id = self.get_key_of_account_at_index(program_idx_in_tx)?;
         self.transaction_frame.configure_cpi();
         let caller_instruction = self.get_current_instruction_index()?;
@@ -1156,7 +1141,7 @@ impl<'ix_data> TransactionContext<'ix_data> {
             .last_mut()
             .ok_or(InstructionError::CallDepth)?;
         // Deduplicate the instruction accounts the caller wrote in the CPI scratchpad
-        let dedup_map = Self::deduplicate_accounts(ix_accounts)?;
+        let dedup_map = Self::deduplicate_accounts(number_of_tx_accounts, ix_accounts)?;
         *self
             .deduplication_maps
             .last_mut()
@@ -2480,8 +2465,11 @@ mod tests {
             InstructionAccount::new(1, true, false), // Account 1 again, signer
         ];
 
-        let dedup_map =
-            TransactionContext::deduplicate_accounts(&mut instruction_accounts).unwrap();
+        let dedup_map = TransactionContext::deduplicate_accounts(
+            instruction_accounts.len(),
+            &mut instruction_accounts,
+        )
+        .unwrap();
 
         // Check that the dedup_map correctly maps duplicate accounts
         assert_eq!(
@@ -2570,8 +2558,11 @@ mod tests {
             InstructionAccount::new(2, false, false),
         ];
 
-        let dedup_map =
-            TransactionContext::deduplicate_accounts(&mut instruction_accounts).unwrap();
+        let dedup_map = TransactionContext::deduplicate_accounts(
+            instruction_accounts.len(),
+            &mut instruction_accounts,
+        )
+        .unwrap();
 
         // Check that the dedup_map correctly maps each account to itself
         assert_eq!(
@@ -2615,8 +2606,11 @@ mod tests {
             InstructionAccount::new(0, false, false),
         ];
 
-        let dedup_map =
-            TransactionContext::deduplicate_accounts(&mut instruction_accounts).unwrap();
+        let dedup_map = TransactionContext::deduplicate_accounts(
+            instruction_accounts.len(),
+            &mut instruction_accounts,
+        )
+        .unwrap();
 
         // Check that all accounts map to the first occurrence (index 0)
         assert_eq!(
@@ -2625,7 +2619,7 @@ mod tests {
             "account must be a duplicate of itself"
         );
         for idx in dedup_map.iter().skip(1) {
-            assert_eq!(*idx, u16::MAX);
+            assert_eq!(*idx, u8::MAX);
         }
 
         // Check that the first account has combined flags
@@ -2730,7 +2724,7 @@ mod tests {
                 0,
                 0,
                 vec![InstructionAccount::new(1, false, false)],
-                vec![u16::MAX; MAX_ACCOUNTS_PER_TRANSACTION],
+                vec![u8::MAX; 2],
                 Cow::Owned(Vec::new()),
                 None,
             )

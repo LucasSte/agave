@@ -323,7 +323,6 @@ impl TransactionAccounts {
         }
     }
 
-
     #[cfg(feature = "dev-context-only-utils")]
     pub fn new(accounts: Vec<KeyedAccountSharedData>) -> TransactionAccounts {
         TransactionAccounts::new_with_feature_flags(accounts, DropOnBailOut::Disabled)

@@ -250,13 +250,14 @@ unsafe fn test_set_buffer_length_return_scratchpad(write_just_outside: bool) {
 
 unsafe fn test_set_buffer_length_account(
     account_idx: u64,
-    account_metadata: &[AccountSharedFields],
+    account_metadata: &mut [AccountSharedFields],
 ) {
-    let meta = &account_metadata[account_idx as usize];
+    let meta = &mut account_metadata[account_idx as usize];
     assert_eq!(meta.payload.len(), 3);
     let mut expected_data = [0; 6];
     expected_data[..3].copy_from_slice(meta.payload.as_slice());
     set_buffer_length(meta.payload.ptr(), 6);
+    core::hint::black_box(&mut meta.payload);
     assert_eq!(meta.payload.len(), 6);
     let account_data = core::slice::from_raw_parts(meta.payload.ptr() as *const u8, 6);
     assert_eq!(account_data, expected_data);

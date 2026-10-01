@@ -164,23 +164,41 @@ impl BuiltinFunctionDefinition<InvokeContext<'_, '_>> for SyscallInvokeSignedV2 
         invoke_context.transaction_context.compute_meter.consume_checked(compute_cost.abi_v2_cpi_base)?;
 
         // Configure instruction frame
-        let callee_program_index_in_tx = u16::try_from(program_idx_in_tx).map_err(|_| InstructionError::MissingAccount)?;
-        invoke_context.transaction_context.build_abi_v2_frame(callee_program_index_in_tx)?;
+        let callee_program_index_in_tx =
+            u16::try_from(program_idx_in_tx).map_err(|_| InstructionError::MissingAccount)?;
+        invoke_context
+            .transaction_context
+            .build_abi_v2_frame(callee_program_index_in_tx)?;
 
         // This check also verifies that the program account is in the transaction
-        let caller_program_id = invoke_context.transaction_context.get_current_instruction_context()?.get_program_key()?;
+        let caller_program_id = invoke_context
+            .transaction_context
+            .get_current_instruction_context()?
+            .get_program_key()?;
 
         // Convert seeds
-        let signers = translate_signers(caller_program_id, signers_seeds_addr, signers_seeds_len, invoke_context)?;
+        let signers = translate_signers(
+            caller_program_id,
+            signers_seeds_addr,
+            signers_seeds_len,
+            invoke_context,
+        )?;
 
         // Invoke program
         invoke_context.internal_native_invoke(&signers)?;
 
         // Update the account permissions and pointers
         let transaction_context = &mut invoke_context.transaction_context;
-        invoke_context.memory_contexts.abi_v2_prepare_for_instruction(transaction_context, true)?;
-        invoke_context.memory_contexts.abi_v2_update_return_data(transaction_context);
-        invoke_context.memory_contexts.memory_mapping_mut()?.initialize()
+        invoke_context
+            .memory_contexts
+            .abi_v2_prepare_for_instruction(transaction_context, true)?;
+        invoke_context
+            .memory_contexts
+            .abi_v2_update_return_data(transaction_context);
+        invoke_context
+            .memory_contexts
+            .memory_mapping_mut()?
+            .initialize()
             .expect("Memory regions should have been configured correctly by runtime");
 
         Ok(0)
