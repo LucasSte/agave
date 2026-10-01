@@ -1,9 +1,7 @@
 use {
     crate::bank::Bank,
     serde::{Deserialize, Serialize},
-    solana_account::{
-        Account, AccountSharedData, ReadableAccount, state_traits::StateMutWincode as _,
-    },
+    solana_account::{Account, AccountSharedData, ReadableAccount},
     solana_clock::Epoch,
     solana_genesis_config::GenesisConfig,
     solana_pubkey::Pubkey,

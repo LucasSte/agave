@@ -567,7 +567,7 @@ fn test_assign_owner() {
 
     // Try resizing the account afterwards
     *payload.last_mut().unwrap() = 1;
-    acc_1.set_data(payload);
+    acc_1.set_data_from_slice(&payload);
     bank.store_account(&acc_1_key, &acc_1);
 
     let metas_for_ix_2 = vec![

@@ -296,7 +296,6 @@ impl TransactionAccounts {
         }
     }
 
-
     #[cfg(feature = "dev-context-only-utils")]
     pub fn new(accounts: Vec<KeyedAccountSharedData>) -> TransactionAccounts {
         TransactionAccounts::new_with_feature_flags(accounts, DropOnBailOut::Disabled)
@@ -653,7 +652,7 @@ impl DerefMut for AccountRefMut<'_> {
 mod tests {
     use {
         crate::transaction_accounts::TransactionAccounts, solana_account::AccountSharedData,
-        solana_instruction::error::InstructionError, solana_pubkey::Pubkey, std::sync::Arc,
+        solana_instruction_error::InstructionError, solana_pubkey::Pubkey, std::sync::Arc,
     };
 
     #[test]

@@ -1,6 +1,6 @@
 use {
     crate::invoke_context::{BpfAllocator, InvokeContext},
-    solana_instruction::error::InstructionError,
+    solana_instruction_error::InstructionError,
     solana_sbpf::{
         ebpf::{MM_BYTECODE_START, MM_HEAP_START, MM_REGION_SIZE, MM_RODATA_START, MM_STACK_START},
         elf::Executable,

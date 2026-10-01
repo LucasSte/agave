@@ -48,7 +48,6 @@ use {
     solana_svm_feature_set::SVMFeatureSet,
     solana_svm_log_collector::{ic_logger_msg, ic_msg},
     solana_svm_type_overrides::sync::Arc,
-    solana_sysvar::SysvarSerialize,
     solana_transaction_context::{
         vm_addresses::{GUEST_ACCOUNT_PAYLOAD_BASE_ADDRESS, abiv2_region_index_from_vm_address},
         vm_slice::VmSlice,
@@ -2895,9 +2894,10 @@ impl BuiltinFunctionDefinition<InvokeContext<'_, '_>> for SyscallGetEpochStake {
     }
 }
 
-declare_builtin_function!(
-    /// Resize the specified buffer to a new size.
-    SyscallSetBufferLength,
+/// Resize the specified buffer to a new size.
+struct SyscallSetBufferLength {}
+impl BuiltinFunctionDefinition<InvokeContext<'_, '_>> for SyscallSetBufferLength {
+    type Error = Error;
     fn rust(
         invoke_context: &mut InvokeContext<'_, '_>,
         region_base_address: u64,
@@ -2945,11 +2945,12 @@ declare_builtin_function!(
         }
         Ok(0)
     }
-);
+}
 
-declare_builtin_function!(
-    // Assign account owner for ABIv2
-    SyscallAssignOwner,
+/// Assign account owner for ABIv2
+pub struct SyscallAssignOwner {}
+impl BuiltinFunctionDefinition<InvokeContext<'_, '_>> for SyscallAssignOwner {
+    type Error = Error;
     fn rust(
         invoke_context: &mut InvokeContext<'_, '_>,
         account_idx_in_tx: u64,
@@ -3003,11 +3004,12 @@ declare_builtin_function!(
 
         Ok(0)
     }
-);
+}
 
-declare_builtin_function!(
-    /// Resize the specified buffer to a new size.
-    SyscallTransferLamports,
+/// Resize the specified buffer to a new size.
+pub struct SyscallTransferLamports {}
+impl BuiltinFunctionDefinition<InvokeContext<'_, '_>> for SyscallTransferLamports {
+    type Error = Error;
     fn rust(
         invoke_context: &mut InvokeContext<'_, '_>,
         to_idx_in_tx: u64,
@@ -3016,21 +3018,24 @@ declare_builtin_function!(
         _arg4: u64,
         _arg5: u64,
     ) -> Result<u64, Error> {
-        let compute_units = invoke_context.get_execution_cost().sol_transfer_lamports_cost;
-        invoke_context.compute_meter.consume_checked(compute_units)?;
+        let compute_units = invoke_context
+            .get_execution_cost()
+            .sol_transfer_lamports_cost;
+        invoke_context
+            .compute_meter
+            .consume_checked(compute_units)?;
 
-        let instruction_context = invoke_context.transaction_context.get_current_instruction_context()?;
-        let to_idx_in_ix = instruction_context
-        .get_index_of_account_in_instruction(
-            u16::try_from(to_idx_in_tx).map_err(|_| InstructionError::MissingAccount)?
+        let instruction_context = invoke_context
+            .transaction_context
+            .get_current_instruction_context()?;
+        let to_idx_in_ix = instruction_context.get_index_of_account_in_instruction(
+            u16::try_from(to_idx_in_tx).map_err(|_| InstructionError::MissingAccount)?,
         )?;
-        let from_idx_in_ix = instruction_context
-        .get_index_of_account_in_instruction(
-            u16::try_from(from_idx_in_tx).map_err(|_| InstructionError::MissingAccount)?
+        let from_idx_in_ix = instruction_context.get_index_of_account_in_instruction(
+            u16::try_from(from_idx_in_tx).map_err(|_| InstructionError::MissingAccount)?,
         )?;
 
-        let mut to_account =
-            instruction_context.try_borrow_instruction_account(to_idx_in_ix)?;
+        let mut to_account = instruction_context.try_borrow_instruction_account(to_idx_in_ix)?;
         let mut from_account =
             instruction_context.try_borrow_instruction_account(from_idx_in_ix)?;
 
@@ -3038,7 +3043,7 @@ declare_builtin_function!(
         to_account.checked_add_lamports(lamports)?;
         Ok(0)
     }
-);
+}
 
 #[cfg(test)]
 #[allow(clippy::arithmetic_side_effects)]
@@ -3085,7 +3090,6 @@ mod tests {
         },
         solana_sysvar_id::SysvarId,
         solana_transaction_context::{
-            MAX_ACCOUNTS_PER_TRANSACTION,
             instruction_accounts::InstructionAccount,
             vm_addresses::{
                 GUEST_ACCOUNT_PAYLOAD_BASE_ADDRESS, GUEST_ACCOUNT_PAYLOAD_END_ADDRESS,
@@ -5412,7 +5416,7 @@ mod tests {
                     idx,
                     0,
                     vec![InstructionAccount::new(idx as u16, false, false)],
-                    vec![u16::MAX; MAX_ACCOUNTS_PER_TRANSACTION],
+                    vec![u8::MAX; 9],
                     Cow::Owned(vec![*ix]),
                     None,
                 )
@@ -5679,7 +5683,7 @@ mod tests {
                     idx,
                     0,
                     vec![InstructionAccount::new(idx as u16, false, false)],
-                    vec![u16::MAX; MAX_ACCOUNTS_PER_TRANSACTION],
+                    vec![u8::MAX; 9],
                     Cow::Owned(vec![*ix]),
                     None,
                 )
@@ -8831,7 +8835,7 @@ mod tests {
                 0,
                 0,
                 vec![InstructionAccount::new(1, false, true)],
-                vec![u16::MAX; MAX_ACCOUNTS_PER_TRANSACTION],
+                vec![u8::MAX; 3],
                 Cow::Owned(Vec::new()),
                 None,
             )
@@ -8843,7 +8847,7 @@ mod tests {
                 1,
                 0,
                 vec![InstructionAccount::new(1, false, true)],
-                vec![u16::MAX; MAX_ACCOUNTS_PER_TRANSACTION],
+                vec![u8::MAX; 3],
                 Cow::Owned(Vec::new()),
                 None,
             )
