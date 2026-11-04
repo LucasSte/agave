@@ -28,7 +28,6 @@ use {
     solana_pubkey::Pubkey,
 };
 
-
 #[derive(Debug)]
 pub struct ComputeMeter(Cell<u64>);
 
@@ -1215,7 +1214,10 @@ impl From<TransactionContext<'_>> for ExecutionRecord {
 
 #[cfg(all(test, not(target_arch = "sbf"), not(target_arch = "bpf")))]
 mod tests {
-    use {super::*, solana_sbpf::ebpf::MM_REGION_SIZE, crate::MAX_INSTRUCTION_TRACE_LENGTH, std::sync::Arc, test_case::test_case};
+    use {
+        super::*, crate::MAX_INSTRUCTION_TRACE_LENGTH, solana_sbpf::ebpf::MM_REGION_SIZE,
+        std::sync::Arc, test_case::test_case,
+    };
 
     #[test]
     fn test_instructions_sysvar_store_index_checked() {
