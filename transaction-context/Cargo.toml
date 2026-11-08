@@ -16,7 +16,7 @@ rustdoc-args = ["--cfg=docsrs"]
 
 [features]
 agave-unstable-api = []
-dev-context-only-utils = ["solana-account/dev-context-only-utils", "dep:qualifier_attr"]
+dev-context-only-utils = ["dep:qualifier_attr"]
 dummy-for-ci-check = []
 serde = ["serde/derive", "solana-pubkey/serde"]
 wincode = ["dep:wincode", "solana-account/wincode", "solana-pubkey/wincode"]

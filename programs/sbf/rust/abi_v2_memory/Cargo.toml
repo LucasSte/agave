@@ -15,7 +15,6 @@ crate-type = ["cdylib"]
 dummy-for-ci-check = ["solana-transaction-context/dummy-for-ci-check"]
 
 [dependencies]
-bincode = { workspace = true }
 solana-clock = { workspace = true }
 solana-epoch-rewards = { workspace = true, features = ["serde"] }
 solana-epoch-schedule = { workspace = true, features = ["serde"] }
@@ -25,3 +24,4 @@ solana-rent = { workspace = true, features = ["sysvar", "serde"] }
 solana-slot-hashes = { workspace = true, features = ["serde"] }
 solana-stake-history = { workspace = true, features = ["serde"] }
 solana-transaction-context = { workspace = true, features = ["agave-unstable-api"] }
+wincode = { workspace = true }

@@ -354,41 +354,41 @@ unsafe fn test_access_sysvars() {
     let end = 0x1000_0000_0000;
     let clock_addr = end - vm_addresses::from_index(1) as usize;
     let clock = core::slice::from_raw_parts(clock_addr as _, 0x1_0000_0000);
-    let clock = bincode::deserialize::<solana_clock::Clock>(clock).unwrap();
+    let clock = wincode::deserialize::<solana_clock::Clock>(clock).unwrap();
     sol_log(format!("{:?}", clock).as_bytes());
 
     let epoch_rewards_addr = end - vm_addresses::from_index(2) as usize;
     let epoch_rewards = core::slice::from_raw_parts(epoch_rewards_addr as _, 0x1_0000_0000);
     let epoch_rewards =
-        bincode::deserialize::<solana_epoch_rewards::EpochRewards>(epoch_rewards).unwrap();
+        wincode::deserialize::<solana_epoch_rewards::EpochRewards>(epoch_rewards).unwrap();
     sol_log(format!("{:?}", epoch_rewards).as_bytes());
 
     let epoch_schedule_addr = end - vm_addresses::from_index(3) as usize;
     let epoch_schedule = core::slice::from_raw_parts(epoch_schedule_addr as _, 0x1_0000_0000);
     let epoch_schedule =
-        bincode::deserialize::<solana_epoch_schedule::EpochSchedule>(epoch_schedule).unwrap();
+        wincode::deserialize::<solana_epoch_schedule::EpochSchedule>(epoch_schedule).unwrap();
     sol_log(format!("{:?}", epoch_schedule).as_bytes());
 
     let restart_slot_addr = end - vm_addresses::from_index(4) as usize;
     let restart_slot = core::slice::from_raw_parts(restart_slot_addr as _, 0x1_0000_0000);
     let restart_slot =
-        bincode::deserialize::<solana_last_restart_slot::LastRestartSlot>(restart_slot).unwrap();
+        wincode::deserialize::<solana_last_restart_slot::LastRestartSlot>(restart_slot).unwrap();
     sol_log(format!("{:?}", restart_slot).as_bytes());
 
     let rent_addr = end - vm_addresses::from_index(5) as usize;
     let rent = core::slice::from_raw_parts(rent_addr as _, 0x1_0000_0000);
-    let rent = bincode::deserialize::<solana_rent::Rent>(rent).unwrap();
+    let rent = wincode::deserialize::<solana_rent::Rent>(rent).unwrap();
     sol_log(format!("{:?}", rent).as_bytes());
 
     let slot_hashes_addr = end - vm_addresses::from_index(6) as usize;
     let slot_hashes = core::slice::from_raw_parts(slot_hashes_addr as _, 0x1_0000_0000);
-    let slot_hashes = bincode::deserialize::<solana_slot_hashes::SlotHashes>(slot_hashes).unwrap();
+    let slot_hashes = wincode::deserialize::<solana_slot_hashes::SlotHashes>(slot_hashes).unwrap();
     sol_log(format!("{:?}", slot_hashes).as_bytes());
 
     let stake_history_addr = end - vm_addresses::from_index(7) as usize;
     let stake_history = core::slice::from_raw_parts(stake_history_addr as _, 0x1_0000_0000);
     let stake_history =
-        bincode::deserialize::<solana_stake_history::StakeHistory>(stake_history).unwrap();
+        wincode::deserialize::<solana_stake_history::StakeHistory>(stake_history).unwrap();
     sol_log(format!("{:?}", stake_history).as_bytes());
 }
 

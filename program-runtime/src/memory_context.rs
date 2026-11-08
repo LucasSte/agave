@@ -487,7 +487,7 @@ mod test {
         let start = abiv2_region_index_from_vm_address(GUEST_ACCOUNT_PAYLOAD_BASE_ADDRESS);
 
         // IX 1
-        tx_context.push().unwrap();
+        tx_context.push(true).unwrap();
         memory_contexts
             .abi_v2_prepare_for_instruction(&tx_context, false)
             .unwrap();
@@ -528,7 +528,7 @@ mod test {
                 Vec::new(),
             )
             .unwrap();
-        tx_context.push().unwrap();
+        tx_context.push(true).unwrap();
 
         memory_contexts
             .abi_v2_prepare_for_instruction(&tx_context, false)
@@ -571,7 +571,7 @@ mod test {
             )
             .unwrap();
 
-        tx_context.push().unwrap();
+        tx_context.push(true).unwrap();
         memory_contexts
             .abi_v2_prepare_for_instruction(&tx_context, false)
             .unwrap();

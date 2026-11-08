@@ -2,7 +2,7 @@
 use {
     crate::program_cache_entry::ProgramCacheEntry,
     qualifier_attr::qualifiers,
-    solana_account::{AccountSharedData, WritableAccount},
+    solana_account::{AccountSharedData, WritableAccount, state_traits::StateMutWincode as _},
     solana_epoch_schedule::EpochSchedule,
     solana_instruction::AccountMeta,
     solana_message::{LegacyMessage, Message, SanitizedMessage},

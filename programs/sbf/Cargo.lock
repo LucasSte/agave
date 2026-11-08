@@ -8548,7 +8548,7 @@ version = "4.5.0-alpha.4"
 
 [[package]]
 name = "solana-sbf-rust-abi-v1-v2-cpi"
-version = "4.5.0-alpha.0"
+version = "4.5.0-alpha.4"
 dependencies = [
  "solana-account-info",
  "solana-program",
@@ -8558,7 +8558,7 @@ dependencies = [
 
 [[package]]
 name = "solana-sbf-rust-abi-v2-cpi"
-version = "4.5.0-alpha.0"
+version = "4.5.0-alpha.4"
 dependencies = [
  "solana-pubkey 4.4.0",
  "solana-transaction-context",
@@ -8566,9 +8566,8 @@ dependencies = [
 
 [[package]]
 name = "solana-sbf-rust-abi-v2-memory"
-version = "4.5.0-alpha.0"
+version = "4.5.0-alpha.4"
 dependencies = [
- "bincode",
  "solana-clock",
  "solana-epoch-rewards",
  "solana-epoch-schedule",
@@ -8578,6 +8577,7 @@ dependencies = [
  "solana-slot-hashes 3.2.0",
  "solana-stake-history",
  "solana-transaction-context",
+ "wincode",
 ]
 
 [[package]]

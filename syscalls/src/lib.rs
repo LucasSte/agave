@@ -3158,7 +3158,7 @@ mod tests {
     use {
         super::*,
         core::slice,
-        solana_account::{AccountSharedData},
+        solana_account::AccountSharedData,
         solana_account_info::AccountInfo,
         solana_clock::Clock,
         solana_epoch_rewards::EpochRewards,
@@ -3219,7 +3219,7 @@ mod tests {
         let serialized_len = wincode::config::serialized_size(value, solana_account::WINCODE_CONFIG)
             .unwrap() as usize;
         let data_len = data_len.max(serialized_len);
-        StateMutWincode::new_data_with_space(1, value, data_len, &sysvar::id()).unwrap()
+        AccountSharedData::new_data_with_space(1, value, data_len, &sysvar::id()).unwrap()
     }
 
     macro_rules! assert_access_violation {
@@ -9459,7 +9459,10 @@ mod tests {
         let memory_mapping =
             unsafe { MemoryMapping::new(regions, &Config::default(), SBPFVersion::V4).unwrap() };
 
-        invoke_context.transaction_context.compute_meter.mock_set_remaining(20);
+        invoke_context
+            .transaction_context
+            .compute_meter
+            .mock_set_remaining(20);
 
         invoke_context
             .transaction_context
@@ -9489,7 +9492,13 @@ mod tests {
                 .unwrap();
             assert_eq!(modified_account.owner(), &new_owner);
         }
-        assert!(invoke_context.transaction_context.compute_meter.consume_checked(1).is_err());
+        assert!(
+            invoke_context
+                .transaction_context
+                .compute_meter
+                .consume_checked(1)
+                .is_err()
+        );
         let acc_region = invoke_context
             .memory_contexts
             .memory_mapping()
@@ -9501,7 +9510,10 @@ mod tests {
         assert!(acc_region.access_violation_handler_payload.is_none());
 
         // Invalid u16
-        invoke_context.transaction_context.compute_meter.mock_set_remaining(20);
+        invoke_context
+            .transaction_context
+            .compute_meter
+            .mock_set_remaining(20);
         let result =
             SyscallAssignOwner::rust(&mut invoke_context, u32::MAX as u64, 1u64 << 32, 0, 0, 0);
         let error = result.unwrap_err().downcast::<InstructionError>().unwrap();
