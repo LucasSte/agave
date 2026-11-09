@@ -15,13 +15,13 @@ crate-type = ["cdylib"]
 dummy-for-ci-check = ["solana-transaction-context/dummy-for-ci-check"]
 
 [dependencies]
-solana-clock = { workspace = true }
-solana-epoch-rewards = { workspace = true, features = ["serde"] }
-solana-epoch-schedule = { workspace = true, features = ["serde"] }
-solana-last-restart-slot = { workspace = true, features = ["serde"] }
+solana-clock = { workspace = true, features = ["wincode"] }
+solana-epoch-rewards = { workspace = true, features = ["wincode"] }
+solana-epoch-schedule = { workspace = true, features = ["wincode"] }
+solana-last-restart-slot = { workspace = true, features = ["wincode"] }
 solana-pubkey = { workspace = true }
-solana-rent = { workspace = true, features = ["sysvar", "serde"] }
-solana-slot-hashes = { workspace = true, features = ["serde"] }
+solana-rent = { workspace = true, features = ["sysvar", "wincode"] }
+solana-slot-hashes = { workspace = true, features = ["wincode"] }
 solana-stake-history = { workspace = true, features = ["serde"] }
 solana-transaction-context = { workspace = true, features = ["agave-unstable-api"] }
 wincode = { workspace = true }
