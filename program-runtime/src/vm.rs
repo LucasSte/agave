@@ -15,7 +15,6 @@ use {
     solana_instruction_error::InstructionError,
     solana_program_entrypoint::{MAX_PERMITTED_DATA_INCREASE, SUCCESS},
     solana_sbpf::{
-        aligned_memory::AlignedMemory,
         ebpf::{self, MM_HEAP_START, MM_RODATA_START, MM_STACK_START},
         elf::Executable,
         error::{EbpfError, ProgramResult},
@@ -217,11 +216,6 @@ pub fn execute<'a, 'b: 'a>(
         >(executable)
     };
     let log_collector = invoke_context.get_log_collector();
-    let transaction_context = &invoke_context.transaction_context;
-    let instruction_context = transaction_context.get_current_instruction_context()?;
-    let program_id = *instruction_context.get_program_key()?;
-    let is_loader_deprecated =
-        instruction_context.get_program_owner()? == bpf_loader_deprecated::id();
     let virtual_address_space_adjustments = invoke_context
         .get_feature_set()
         .virtual_address_space_adjustments;
@@ -229,11 +223,57 @@ pub fn execute<'a, 'b: 'a>(
     let direct_account_pointers_in_program_input = invoke_context
         .get_feature_set()
         .direct_account_pointers_in_program_input;
-    let pass_input_metadata_in_vm_r3_r5 = invoke_context.get_feature_set()
+    let pass_input_metadata_in_vm_r3_r5 = invoke_context
+        .get_feature_set()
         .pass_input_metadata_in_vm_r3_r5;
 
     let is_abi_v2 = executable.get_sbpf_version() == SBPFVersion::V4
         && invoke_context.get_feature_set().program_runtime_abiv2;
+
+    let mut abiv1_parameters = if is_abi_v2 {
+        initialize_abi_v2_areas(invoke_context, executable)?;
+        None
+    } else {
+        // When executing an ABIv1 CPI invoked from a ABIv2 program, we will charge extra
+        if invoke_context
+            .transaction_context
+            .get_current_instruction_context()?
+            .get_stack_height()
+            > 1
+            && invoke_context
+                .memory_contexts
+                .is_parent_abi_v2_instruction()?
+        {
+            let compute_cost = invoke_context.get_execution_cost();
+            invoke_context
+                .transaction_context
+                .compute_meter
+                .consume_checked(compute_cost.abi_v1_cpi_surcharge)?;
+        }
+
+        let transaction_context = &invoke_context.transaction_context;
+        let instruction_context = transaction_context.get_current_instruction_context()?;
+
+        let mut serialize_time = Measure::start("serialize");
+        let serialization_result = serialization::serialize_parameters(
+            &instruction_context,
+            virtual_address_space_adjustments,
+            account_data_direct_mapping,
+            direct_account_pointers_in_program_input,
+        )?;
+        serialize_time.stop();
+
+        Some(ABIv1Parameters {
+            serialization_result,
+            serialize_time,
+        })
+    };
+
+    let transaction_context = &invoke_context.transaction_context;
+    let instruction_context = transaction_context.get_current_instruction_context()?;
+    let is_loader_deprecated =
+        instruction_context.get_program_owner()? == bpf_loader_deprecated::id();
+    let program_id = *instruction_context.get_program_key()?;
 
     #[cfg(feature = "sbpf-debugger")]
     let (debug_port, debug_metadata) = if invoke_context.debug_port.is_some() {
@@ -260,42 +300,6 @@ pub fn execute<'a, 'b: 'a>(
         (None, None)
     };
 
-    let mut abiv1_parameters = if is_abi_v2 {
-        initialize_abi_v2_areas(invoke_context, executable)?;
-        None
-    } else {
-        // When executing an ABIv1 CPI invoked from a ABIv2 program, we will charge extra
-        if invoke_context
-            .transaction_context
-            .get_current_instruction_context()?
-            .get_stack_height()
-            > 1
-            && invoke_context
-                .memory_contexts
-                .is_parent_abi_v2_instruction()?
-        {
-            let compute_cost = invoke_context.get_execution_cost();
-            invoke_context
-                .compute_meter
-                .consume_checked(compute_cost.abi_v1_cpi_surcharge)?;
-        }
-
-        let mut serialize_time = Measure::start("serialize");
-        let serialization_result =
-            serialization::serialize_parameters(
-                &instruction_context,
-                virtual_address_space_adjustments,
-                account_data_direct_mapping,
-                direct_account_pointers_in_program_input,
-            )?;
-        serialize_time.stop();
-
-        Some(ABIv1Parameters {
-            serialization_result,
-            serialize_time,
-        })
-    };
-
     let instruction_data_len = instruction_context.get_instruction_data().len();
     let number_of_instruction_accounts = instruction_context.get_number_of_instruction_accounts();
 
@@ -304,7 +308,8 @@ pub fn execute<'a, 'b: 'a>(
     let account_region_addrs = abiv1_parameters
         .as_ref()
         .map(|params| {
-            params.serialization_result
+            params
+                .serialization_result
                 .accounts_metadata
                 .iter()
                 .map(|m| {
@@ -382,7 +387,9 @@ pub fn execute<'a, 'b: 'a>(
             // SIMD-0683: Pass ABIv1 input metadata via registers r3–r5.
             if !is_loader_deprecated && pass_input_metadata_in_vm_r3_r5 {
                 vm.registers[3] = instruction_data_len as u64;
-                vm.registers[4] = if let Some(account_pointers_offset) = v1_params.serialization_result.account_pointers_offset {
+                vm.registers[4] = if let Some(account_pointers_offset) =
+                    v1_params.serialization_result.account_pointers_offset
+                {
                     account_pointers_offset as u64
                 } else {
                     // SIMD-0683 depends on SIMD-0449, which provides the account
@@ -390,9 +397,9 @@ pub fn execute<'a, 'b: 'a>(
                     // should always be present when SIMD-0683 is enabled so this error
                     // should never happen.
                     ic_logger_msg!(
-                    log_collector,
-                    "Failed to create SBF VM: cannot determine account pointers offset"
-                );
+                        log_collector,
+                        "Failed to create SBF VM: cannot determine account pointers offset"
+                    );
                     return Err(Box::new(InstructionError::ProgramEnvironmentSetupFailure));
                 };
                 vm.registers[5] = number_of_instruction_accounts as u64;

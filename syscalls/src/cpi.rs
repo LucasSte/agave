@@ -2,15 +2,9 @@ use {
     super::*,
     solana_instruction::Instruction,
     solana_program_runtime::cpi::{
-<<<<<<< HEAD
         SolInstruction, SyscallInvokeSigned, TranslatedAccount, cpi_common, translate_accounts_c,
         translate_accounts_rust, translate_accounts_v2, translate_instruction_c,
-        translate_instruction_rust, translate_instruction_v2,
-=======
-        SyscallInvokeSigned, TranslatedAccount, cpi_common, translate_accounts_c,
-        translate_accounts_rust, translate_instruction_c, translate_instruction_rust,
-        translate_signers,
->>>>>>> 305570cac3 (ABIv2 => ABIv2 CPI (#10))
+        translate_instruction_rust, translate_instruction_v2, translate_signers,
     },
 };
 
@@ -149,7 +143,7 @@ impl SyscallInvokeSigned for SyscallInvokeSignedV2 {
 /// Cross-program invocation called from `sol_invoke_signed_v2`
 pub struct SyscallInvokeSignedABIV2 {}
 
-impl BuiltinFunctionDefinition<InvokeContext<'_, '_>> for SyscallInvokeSignedV2 {
+impl BuiltinFunctionDefinition<InvokeContext<'_, '_>> for SyscallInvokeSignedABIV2 {
     type Error = Error;
     fn rust(
         invoke_context: &mut InvokeContext<'_, '_>,
@@ -161,7 +155,10 @@ impl BuiltinFunctionDefinition<InvokeContext<'_, '_>> for SyscallInvokeSignedV2 
     ) -> Result<u64, Error> {
         // Deduct cost
         let compute_cost = invoke_context.get_execution_cost();
-        invoke_context.transaction_context.compute_meter.consume_checked(compute_cost.abi_v2_cpi_base)?;
+        invoke_context
+            .transaction_context
+            .compute_meter
+            .consume_checked(compute_cost.abi_v2_cpi_base)?;
 
         // Configure instruction frame
         let callee_program_index_in_tx =

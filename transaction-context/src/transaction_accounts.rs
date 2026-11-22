@@ -664,14 +664,10 @@ impl DerefMut for AccountRefMut<'_> {
 #[cfg(all(test, not(target_arch = "sbf"), not(target_arch = "bpf")))]
 mod tests {
     use {
-        crate::{
-            transaction_accounts::TransactionAccounts,
-            vm_addresses::{GUEST_ACCOUNT_PAYLOAD_BASE_ADDRESS, GUEST_REGION_SIZE},
-        },
+        crate::transaction_accounts::TransactionAccounts,
         solana_account::{AccountSharedData, ReadableAccount},
-        solana_instruction::error::InstructionError,
+        solana_instruction_error::InstructionError,
         solana_pubkey::Pubkey,
-        solana_sbpf::memory_region::{HostBuffer, MemoryRegion},
         std::sync::Arc,
         test_case::test_case,
     };

@@ -1,7 +1,7 @@
 #![cfg(feature = "agave-unstable-api")]
 
 pub use self::{
-    cpi::{SyscallInvokeSignedC, SyscallInvokeSignedRust, SyscallInvokeSignedV2},
+    cpi::{SyscallInvokeSignedC, SyscallInvokeSignedRust},
     logging::{
         SyscallLog, SyscallLogBpfComputeUnits, SyscallLogData, SyscallLogPubkey, SyscallLogU64,
     },
@@ -13,11 +13,11 @@ pub use self::{
     },
 };
 use {
-    crate::{cpi::SyscallInvokeSignedV2, mem_ops::is_nonoverlapping},
-    solana_big_mod_exp::{
-        BIG_MOD_EXP_MAX_BYTES, BIG_MOD_EXP_MIN_EXPONENT_LENGTH,
-        BIG_MOD_EXP_MOD_REDUCTION_COMPLEXITY_FACTOR, BigModExpParams, big_mod_exp,
+    crate::{
+        cpi::{SyscallInvokeSignedABIV2, SyscallInvokeSignedV2},
+        mem_ops::is_nonoverlapping,
     },
+    solana_big_mod_exp::{BIG_MOD_EXP_MAX_BYTES, BigModExpParams, big_mod_exp},
     solana_blake3_hasher as blake3,
     solana_cpi::MAX_RETURN_DATA,
     solana_hash::Hash,
@@ -556,8 +556,8 @@ pub fn create_program_runtime_environment(
     register_feature_gated_function!(
         result,
         enable_abiv2,
-        "sol_invoke_signed_v2",
-        SyscallInvokeSignedV2,
+        "sol_invoke_signed_abi_v2",
+        SyscallInvokeSignedABIV2,
     )?;
 
     Ok(ProgramRuntimeEnvironment::from(result))
@@ -3006,6 +3006,7 @@ impl BuiltinFunctionDefinition<InvokeContext<'_, '_>> for SyscallSetBufferLength
         let compute_cost = invoke_context.get_execution_cost();
         let cpi_bytes_per_unit = compute_cost.cpi_bytes_per_unit;
         invoke_context
+            .transaction_context
             .compute_meter
             .consume_checked(compute_cost.set_buffer_length_base_cost)?;
 
@@ -3025,7 +3026,10 @@ impl BuiltinFunctionDefinition<InvokeContext<'_, '_>> for SyscallSetBufferLength
             // This may change in the future if we end up using something fancier as the backing
             // storage.
             let cost = new_len.checked_div(cpi_bytes_per_unit).unwrap_or(u64::MAX);
-            invoke_context.compute_meter.consume_checked(cost)?;
+            invoke_context
+                .transaction_context
+                .compute_meter
+                .consume_checked(cost)?;
         }
         let new_region = invoke_context
             .transaction_context
@@ -3058,6 +3062,7 @@ impl BuiltinFunctionDefinition<InvokeContext<'_, '_>> for SyscallAssignOwner {
     ) -> Result<u64, Error> {
         let compute_units = invoke_context.get_execution_cost().abi_v2_assign_owner;
         invoke_context
+            .transaction_context
             .compute_meter
             .consume_checked(compute_units)?;
 
@@ -3119,6 +3124,7 @@ impl BuiltinFunctionDefinition<InvokeContext<'_, '_>> for SyscallTransferLamport
             .get_execution_cost()
             .sol_transfer_lamports_cost;
         invoke_context
+            .transaction_context
             .compute_meter
             .consume_checked(compute_units)?;
 
@@ -3151,7 +3157,7 @@ mod tests {
     use {
         super::*,
         core::slice,
-        solana_account::{AccountSharedData, state_traits::StateMutWincode as _},
+        solana_account::{AccountSharedData, state_traits::StateMutWincode},
         solana_account_info::AccountInfo,
         solana_clock::Clock,
         solana_epoch_rewards::EpochRewards,
@@ -9452,7 +9458,10 @@ mod tests {
         let memory_mapping =
             unsafe { MemoryMapping::new(regions, &Config::default(), SBPFVersion::V4).unwrap() };
 
-        invoke_context.compute_meter.mock_set_remaining(20);
+        invoke_context
+            .transaction_context
+            .compute_meter
+            .mock_set_remaining(20);
 
         invoke_context
             .transaction_context
@@ -9482,7 +9491,13 @@ mod tests {
                 .unwrap();
             assert_eq!(modified_account.owner(), &new_owner);
         }
-        assert!(invoke_context.compute_meter.consume_checked(1).is_err());
+        assert!(
+            invoke_context
+                .transaction_context
+                .compute_meter
+                .consume_checked(1)
+                .is_err()
+        );
         let acc_region = invoke_context
             .memory_contexts
             .memory_mapping()
@@ -9494,7 +9509,10 @@ mod tests {
         assert!(acc_region.access_violation_handler_payload.is_none());
 
         // Invalid u16
-        invoke_context.compute_meter.mock_set_remaining(20);
+        invoke_context
+            .transaction_context
+            .compute_meter
+            .mock_set_remaining(20);
         let result =
             SyscallAssignOwner::rust(&mut invoke_context, u32::MAX as u64, 1u64 << 32, 0, 0, 0);
         let error = result.unwrap_err().downcast::<InstructionError>().unwrap();

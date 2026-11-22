@@ -10,7 +10,7 @@ use {
     solana_runtime::{
         bank::Bank,
         bank_client::BankClient,
-        genesis_utils::{GenesisConfigInfo, create_genesis_config},
+        genesis_utils::{GenesisConfigInfo, create_genesis_config_with_default_rent},
         loader_utils::load_upgradeable_program_and_advance_slot,
     },
     solana_sdk_ids::system_program,
@@ -24,6 +24,8 @@ use {
     solana_transaction_error::TransactionError,
     std::sync::Arc,
 };
+
+const MINT_LAMPORTS: u64 = 1_000_000_000_000;
 
 fn process_transaction_and_record_inner(
     bank: &Bank,
@@ -72,7 +74,7 @@ fn regions_sanity_test() {
         genesis_config,
         mint_keypair,
         ..
-    } = create_genesis_config(50);
+    } = create_genesis_config_with_default_rent(MINT_LAMPORTS);
 
     let (bank, bank_forks) = Bank::new_with_bank_forks_for_tests(&genesis_config);
     let mut bank_client = BankClient::new_shared(bank.clone());
@@ -161,7 +163,7 @@ fn test_access_invalid_regions() {
         genesis_config,
         mint_keypair,
         ..
-    } = create_genesis_config(50);
+    } = create_genesis_config_with_default_rent(MINT_LAMPORTS);
 
     let (bank, bank_forks) = Bank::new_with_bank_forks_for_tests(&genesis_config);
     let mut bank_client = BankClient::new_shared(bank.clone());
@@ -237,7 +239,7 @@ fn test_write_to_accounts() {
         genesis_config,
         mint_keypair,
         ..
-    } = create_genesis_config(50);
+    } = create_genesis_config_with_default_rent(MINT_LAMPORTS);
 
     let (bank, bank_forks) = Bank::new_with_bank_forks_for_tests(&genesis_config);
     let mut bank_client = BankClient::new_shared(bank.clone());
@@ -284,7 +286,7 @@ fn test_write_to_accounts() {
     let result = bank_client.send_and_confirm_message(&[&mint_keypair], message);
     assert!(result.is_ok());
 
-    let account = bank.get_account_with_fixed_root(&acc_1_key).unwrap();
+    let account = bank.get_account(&acc_1_key).unwrap();
     assert_eq!(account.data(), &[7, 8, 9]);
 }
 
@@ -294,7 +296,7 @@ fn account_permissions_update() {
         genesis_config,
         mint_keypair,
         ..
-    } = create_genesis_config(50);
+    } = create_genesis_config_with_default_rent(MINT_LAMPORTS);
 
     let (bank, bank_forks) = Bank::new_with_bank_forks_for_tests(&genesis_config);
     let mut bank_client = BankClient::new_shared(bank.clone());
@@ -381,7 +383,7 @@ fn common_set_buffer_length(test_discr: u8) -> CommittedTransaction {
         genesis_config,
         mint_keypair,
         ..
-    } = create_genesis_config(50);
+    } = create_genesis_config_with_default_rent(MINT_LAMPORTS);
     let (bank, bank_forks) = Bank::new_with_bank_forks_for_tests(&genesis_config);
     let mut bank_client = BankClient::new_shared(bank.clone());
     let authority_keypair = Keypair::new();
@@ -394,7 +396,7 @@ fn common_set_buffer_length(test_discr: u8) -> CommittedTransaction {
     );
     let acc_1_key = Pubkey::new_unique();
     let acc_1 = AccountSharedData::create_from_existing_shared_data(
-        9999,
+        2239999,
         vec![1, 2, 3].into(),
         program_id,
         false,
@@ -404,7 +406,7 @@ fn common_set_buffer_length(test_discr: u8) -> CommittedTransaction {
 
     let acc_2_key = Pubkey::new_unique();
     let acc_2 = AccountSharedData::create_from_existing_shared_data(
-        10001,
+        232310001,
         vec![7, 8, 9].into(),
         system_program::id(),
         false,
@@ -414,7 +416,7 @@ fn common_set_buffer_length(test_discr: u8) -> CommittedTransaction {
 
     let acc_3_key = Pubkey::new_unique();
     let acc_3 = AccountSharedData::create_from_existing_shared_data(
-        10000,
+        25510000,
         vec![4, 5, 6].into(),
         program_id,
         false,
@@ -504,7 +506,7 @@ fn test_assign_owner() {
         genesis_config,
         mint_keypair,
         ..
-    } = create_genesis_config(50);
+    } = create_genesis_config_with_default_rent(MINT_LAMPORTS);
 
     let (bank, bank_forks) = Bank::new_with_bank_forks_for_tests(&genesis_config);
     let mut bank_client = BankClient::new_shared(bank.clone());
@@ -524,7 +526,7 @@ fn test_assign_owner() {
     let mut payload = new_owner.as_array().to_vec();
     payload.push(0);
     let mut acc_1 = AccountSharedData::create_from_existing_shared_data(
-        223450,
+        29923450,
         Arc::new(payload.clone()),
         program_id,
         false,
@@ -534,7 +536,7 @@ fn test_assign_owner() {
 
     let acc_2_key = Pubkey::new_unique();
     let acc_2 = AccountSharedData::create_from_existing_shared_data(
-        90123,
+        2990123,
         Arc::new(Vec::new()),
         program_id,
         false,
@@ -544,7 +546,7 @@ fn test_assign_owner() {
 
     let acc_3_key = Pubkey::new_unique();
     let acc_3 = AccountSharedData::create_from_existing_shared_data(
-        897,
+        1990897,
         Arc::new(Vec::new()),
         program_id,
         false,
@@ -591,7 +593,7 @@ fn test_sol_transfer_lamports() {
         genesis_config,
         mint_keypair,
         ..
-    } = create_genesis_config(50);
+    } = create_genesis_config_with_default_rent(MINT_LAMPORTS);
 
     let (bank, bank_forks) = Bank::new_with_bank_forks_for_tests(&genesis_config);
     let mut bank_client = BankClient::new_shared(bank.clone());
@@ -607,7 +609,7 @@ fn test_sol_transfer_lamports() {
 
     let acc_1_key = Pubkey::new_unique();
     let acc_1 = AccountSharedData::create_from_existing_shared_data(
-        10,
+        1000010,
         vec![1, 2, 3].into(),
         program_id,
         false,
@@ -617,7 +619,7 @@ fn test_sol_transfer_lamports() {
 
     let acc_2_key = Pubkey::new_unique();
     let acc_2 = AccountSharedData::create_from_existing_shared_data(
-        40,
+        1000040,
         vec![4, 5, 6].into(),
         program_id,
         false,
@@ -637,8 +639,8 @@ fn test_sol_transfer_lamports() {
     let (_, _, logs, _) = process_transaction_and_record_inner(&bank, tx);
 
     assert!(logs.last().unwrap().contains("success"));
-    assert_eq!(bank.get_account(&acc_1_key).unwrap().lamports(), 20);
-    assert_eq!(bank.get_account(&acc_2_key).unwrap().lamports(), 30);
+    assert_eq!(bank.get_account(&acc_1_key).unwrap().lamports(), 1000020);
+    assert_eq!(bank.get_account(&acc_2_key).unwrap().lamports(), 1000030);
 }
 
 #[test]
@@ -647,7 +649,7 @@ fn test_sysvar_access() {
         genesis_config,
         mint_keypair,
         ..
-    } = create_genesis_config(50);
+    } = create_genesis_config_with_default_rent(MINT_LAMPORTS);
     let (bank, bank_forks) = Bank::new_with_bank_forks_for_tests(&genesis_config);
     let mut bank_client = BankClient::new_shared(bank.clone());
     let authority_keypair = Keypair::new();
@@ -674,7 +676,7 @@ fn test_resize_cpi_scratchpad() {
         genesis_config,
         mint_keypair,
         ..
-    } = create_genesis_config(50);
+    } = create_genesis_config_with_default_rent(MINT_LAMPORTS);
 
     let (bank, bank_forks) = Bank::new_with_bank_forks_for_tests(&genesis_config);
     let mut bank_client = BankClient::new_shared(bank.clone());
@@ -715,7 +717,7 @@ fn test_basic_cpi() {
         genesis_config,
         mint_keypair,
         ..
-    } = create_genesis_config(50);
+    } = create_genesis_config_with_default_rent(MINT_LAMPORTS);
 
     let (bank, bank_forks) = Bank::new_with_bank_forks_for_tests(&genesis_config);
     let mut bank_client = BankClient::new_shared(bank.clone());
@@ -789,7 +791,7 @@ fn test_cpi_into_v1() {
         genesis_config,
         mint_keypair,
         ..
-    } = create_genesis_config(50);
+    } = create_genesis_config_with_default_rent(MINT_LAMPORTS);
 
     let (bank, bank_forks) = Bank::new_with_bank_forks_for_tests(&genesis_config);
     let mut bank_client = BankClient::new_shared(bank.clone());
@@ -853,7 +855,7 @@ fn test_three_level_cpi() {
         genesis_config,
         mint_keypair,
         ..
-    } = create_genesis_config(50);
+    } = create_genesis_config_with_default_rent(MINT_LAMPORTS);
 
     let (bank, bank_forks) = Bank::new_with_bank_forks_for_tests(&genesis_config);
     let mut bank_client = BankClient::new_shared(bank.clone());
@@ -926,7 +928,7 @@ fn test_resize_more_than_allowed() {
         genesis_config,
         mint_keypair,
         ..
-    } = create_genesis_config(50);
+    } = create_genesis_config_with_default_rent(MINT_LAMPORTS);
 
     let (bank, bank_forks) = Bank::new_with_bank_forks_for_tests(&genesis_config);
     let mut bank_client = BankClient::new_shared(bank.clone());

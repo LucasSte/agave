@@ -98,7 +98,7 @@ fn set_buffer_length(base_address: u64, new_length: u64) -> u64 {
 
 fn invoke_cpi(program_idx: u64, signer_seeds_ptr: u64, signer_seeds_len: u64) {
     unsafe {
-        let syscall: extern "C" fn(u64, u64, u64) = core::mem::transmute(2722332484u64);
+        let syscall: extern "C" fn(u64, u64, u64) = core::mem::transmute(1722204972u64);
         syscall(program_idx, signer_seeds_ptr, signer_seeds_len);
     }
 }
