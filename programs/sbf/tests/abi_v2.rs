@@ -5,12 +5,12 @@ use {
     solana_client_traits::SyncClient,
     solana_instruction::{AccountMeta, Instruction},
     solana_keypair::Keypair,
-    solana_message::{inner_instruction::InnerInstruction, Message},
+    solana_message::{Message, inner_instruction::InnerInstruction},
     solana_pubkey::Pubkey,
     solana_runtime::{
         bank::Bank,
         bank_client::BankClient,
-        genesis_utils::{create_genesis_config_with_default_rent, GenesisConfigInfo},
+        genesis_utils::{GenesisConfigInfo, create_genesis_config_with_default_rent},
         loader_utils::load_upgradeable_program_and_advance_slot,
     },
     solana_sdk_ids::system_program,
@@ -455,12 +455,14 @@ fn buffer_resize_return_scratchpad_oob_access() {
     let result = common_set_buffer_length(0x05);
     result.status.expect_err("err");
     assert_eq!(128, result.return_data.unwrap().data.len());
-    assert!(result
-        .log_messages
-        .unwrap()
-        .last()
-        .unwrap()
-        .contains("Access violation"));
+    assert!(
+        result
+            .log_messages
+            .unwrap()
+            .last()
+            .unwrap()
+            .contains("Access violation")
+    );
 }
 
 #[test]
@@ -473,24 +475,28 @@ fn buffer_resize_writable_account() {
 fn buffer_resize_readonly_account() {
     let result = common_set_buffer_length(0x07);
     result.status.expect_err("err");
-    assert!(result
-        .log_messages
-        .unwrap()
-        .last()
-        .unwrap()
-        .contains("instruction modified data of a read-only account"));
+    assert!(
+        result
+            .log_messages
+            .unwrap()
+            .last()
+            .unwrap()
+            .contains("instruction modified data of a read-only account")
+    );
 }
 
 #[test]
 fn buffer_resize_somebody_elses_account() {
     let result = common_set_buffer_length(0x08);
     result.status.expect_err("err");
-    assert!(result
-        .log_messages
-        .unwrap()
-        .last()
-        .unwrap()
-        .contains("instruction modified data of an account it does not own"));
+    assert!(
+        result
+            .log_messages
+            .unwrap()
+            .last()
+            .unwrap()
+            .contains("instruction modified data of an account it does not own")
+    );
 }
 
 #[test]
@@ -573,10 +579,11 @@ fn test_assign_owner() {
     let message = Message::new(&[ix_1], Some(&mint_keypair.pubkey()));
     let tx = Transaction::new(&[&mint_keypair], message, bank.last_blockhash());
     let (_, _, logs, _) = process_transaction_and_record_inner(&bank, tx);
-    assert!(logs
-        .last()
-        .unwrap()
-        .contains("instruction modified data of an account it does not own"));
+    assert!(
+        logs.last()
+            .unwrap()
+            .contains("instruction modified data of an account it does not own")
+    );
 }
 
 #[test]
@@ -978,8 +985,9 @@ fn test_resize_more_than_allowed() {
     assert!(logs.iter().any(|item| {
         item.contains("Account data size realloc limited to 10240 in inner instructions")
     }));
-    assert!(logs
-        .last()
-        .unwrap()
-        .contains("Failed to reallocate account data"));
+    assert!(
+        logs.last()
+            .unwrap()
+            .contains("Failed to reallocate account data")
+    );
 }
